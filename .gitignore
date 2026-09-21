@@ -1,0 +1,26 @@
+# ambiente
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# streamlit
+.streamlit/secrets.toml
+
+# sistema
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# editores
+.vscode/
+.idea/
+
+# saidas temporarias
+*.log
+*.tmp
+
+# anotacoes pessoais, fora do entregavel
+README.md

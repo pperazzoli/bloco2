@@ -1,0 +1,5 @@
+host,robots_url,status_http,politica,crawl_delay_s,verificado_em
+https://agenciabrasil.ebc.com.br,https://agenciabrasil.ebc.com.br/robots.txt,200,regras do robots.txt aplicadas,10.0,2026-09-21T17:17:49+00:00
+https://todospelaeducacao.org.br,https://todospelaeducacao.org.br/robots.txt,200,regras do robots.txt aplicadas,0.4,2026-09-21T17:17:51+00:00
+https://gife.org.br,https://gife.org.br/robots.txt,200,regras do robots.txt aplicadas,0.4,2026-09-21T17:17:51+00:00
+https://observatorio3setor.org.br,https://observatorio3setor.org.br/robots.txt,200,regras do robots.txt aplicadas,0.4,2026-09-21T17:17:51+00:00

@@ -1,0 +1,10 @@
+fonte,tipo_de_dado,acesso,granularidade,objetivo_de_uso,status
+IBGE - API de Agregados (SIDRA),Quantitativo contínuo (percentuais),"API REST, sem chave",Unidade da Federação,Fonte principal: indicadores oficiais de monitoramento da ODS 4 que compõem o índice de prioridade,Coletado
+IBGE - API de Localidades,Categórico nominal (códigos e nomes),"API REST, sem chave",UF e região,Tabela de domínio territorial: chave de junção entre as fontes e agrupamento por região,Coletado
+Agencia Brasil - editoria de Educacao,"Texto nao estruturado (titulo, data, corpo da materia)",Raspagem de HTML paginado com Beautiful Soup,Materia jornalistica,"Agenda publica da educacao: nuvem de palavras, temas da ODS 4 e mencoes por UF",Coletado
+Todos Pela Educacao,"Texto nao estruturado (titulo, resumo, corpo da materia)",Raspagem do XML de sindicacao com Beautiful Soup,Materia e artigo de opiniao,Leitura do terceiro setor sobre as metas educacionais,Coletado
+GIFE,"Texto nao estruturado (titulo, resumo, corpo da materia)",Raspagem do XML de sindicacao com Beautiful Soup,Materia sobre investimento social privado,"Pauta do investidor social privado, publico primario da aplicacao",Coletado
+Observatorio do Terceiro Setor,"Texto nao estruturado (titulo, resumo, corpo da materia)",Raspagem do XML de sindicacao com Beautiful Soup,Materia e chamada de projeto social,Projetos e organizacoes executoras em campo,Coletado
+IBGE - API de Malhas Territoriais,Geoespacial (poligonos das UFs em GeoJSON),"API REST, sem chave",Unidade da Federacao,Base do mapa coropletico da aplicacao,Coletado
+INEP - Censo Escolar e IDEB,"Misto: binário (infraestrutura por escola), quantitativo (matrículas), ordinal (IDEB)",Download de arquivo CSV/ZIP,Escola e município,"Descer a análise ao nível municipal, que a API do IBGE não cobre",Previsto
+Banco Mundial - World Development Indicators,Quantitativo contínuo (percentuais),"API REST, sem chave",País,Benchmark internacional para dimensionar o problema no reporte ESG,Previsto
