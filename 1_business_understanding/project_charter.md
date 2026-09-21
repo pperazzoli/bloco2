@@ -1,8 +1,8 @@
 # Project Charter — Bússola ESG Educação
 
 **Estágio TDSP:** 1. Business Understanding · **Data:** 2026-08-24
-**edited 21-09-2026 (TP2):** escopo, riscos, arquitetura e marcos revisados. As seções
-novas estão marcadas com *(TP2)*.
+**edited 21-09-2026:** escopo, riscos, arquitetura e marcos revisados. O que entrou nesta
+revisão está indicado no início de cada seção.
 
 ---
 
@@ -43,6 +43,8 @@ descida ao nível municipal depende dos microdados do INEP.
 
 ## 3. Objetivos
 
+*Objetivos 3.5 e 3.6 adicionados em setembro — TP2.*
+
 **3.1** Coletar via API os indicadores oficiais de monitoramento da ODS 4.
 
 **3.2** Consolidá-los em um Índice de Prioridade de Investimento por território.
@@ -51,15 +53,17 @@ descida ao nível municipal depende dos microdados do INEP.
 
 **3.4** Gerar o reporte ESG com rastreabilidade de fonte, ano e URL de cada valor.
 
-**3.5** *(TP2)* Monitorar a agenda pública da educação por extração de conteúdo web, para
+**3.5** Monitorar a agenda pública da educação por extração de conteúdo web, para
 que o diagnóstico quantitativo venha acompanhado do contexto qualitativo do período.
 
-**3.6** *(TP2)* Abrir a base à contribuição do usuário por upload de CSV, sem exigir acesso
+**3.6** Abrir a base à contribuição do usuário por upload de CSV, sem exigir acesso
 ao código nem ao repositório.
 
 ---
 
 ## 4. Metas e indicadores de sucesso
+
+*Metas 4.8 e 4.9 adicionadas em setembro — TP2.*
 
 **4.1 Cobertura territorial** — indicador: % de UFs com índice calculado. Alvo: 100%, as 27 UFs.
 
@@ -79,10 +83,10 @@ comparado. Alvo: menos de 5 minutos.
 **4.7 Qualidade do ranking** — indicador: sobreposição do top-10 do índice com a avaliação de
 um especialista. Alvo: pelo menos 70%.
 
-**4.8 Cobertura da imprensa** *(TP2)* — indicador: número de fontes de conteúdo web
+**4.8 Cobertura da imprensa** — indicador: número de fontes de conteúdo web
 integradas. Alvo: pelo menos 3. **Situação atual: 4 fontes, 105 matérias.**
 
-**4.9 Resposta da interface** *(TP2)* — indicador: tempo de resposta a uma troca de filtro
+**4.9 Resposta da interface** — indicador: tempo de resposta a uma troca de filtro
 com os dados já em cache. Alvo: menos de 1 segundo.
 
 ---
@@ -135,19 +139,22 @@ carência, beneficiários indiretos do redirecionamento do recurso.
 
 ## 7. Stakeholders
 
+*Stakeholder 7.5 adicionado em setembro — TP2.*
+
 | # | Stakeholder | Papel | Interesse | Como o projeto responde |
 | --- | --- | --- | --- | --- |
 | 7.1 | Área de Sustentabilidade e ESG | Usuário primário e patrocinador | Decidir e reportar com segurança | Ranking com pesos explícitos e minuta de reporte rastreável |
 | 7.2 | Institutos, fundações e ONGs de educação | Usuário secundário e executor | Ser encontrado e financiado | Evidência de carência territorial para fundamentar captação |
 | 7.3 | Secretarias estaduais e municipais de educação | Parceiro público | Atrair recurso complementar | Diagnóstico comparável entre territórios |
 | 7.4 | IBGE e INEP | Provedores de dados | Reúso qualificado do dado público | Citação de fonte, ano e URL em cada valor exibido |
-| 7.5 | Imprensa e terceiro setor *(TP2)* | Provedores de contexto | Circulação qualificada da pauta | Link para a matéria original em toda menção |
+| 7.5 | Imprensa e terceiro setor | Provedores de contexto | Circulação qualificada da pauta | Link para a matéria original em toda menção |
 | 7.6 | Estudantes da rede pública | Beneficiário final | Melhoria das condições de ensino | Redirecionamento do recurso para territórios carentes |
-| 7.7 | Docente da disciplina *(TP2)* | Avaliador | Verificar as entregas do TP | Documentação TDSP versionada junto ao código |
 
 ---
 
 ## 8. Riscos
+
+*Riscos 8.5 a 8.8 adicionados em setembro — TP2.*
 
 **8.1 Indisponibilidade ou mudança das APIs públicas** — mitigação: coletar e armazenar os
 dados em ambiente local. *edited 21-09-2026:* a aplicação lê exclusivamente os arquivos de
@@ -164,20 +171,20 @@ impressos na seção 1 do reporte ESG gerado.
 **8.4 IA generativa produzir afirmação incorreta no reporte** — mitigação: LLM's não
 produziram dados, apenas consultas.
 
-**8.5 Quebra do seletor de raspagem** *(TP2)* — os sites de origem podem mudar de HTML.
+**8.5 Quebra do seletor de raspagem** — os sites de origem podem mudar de HTML.
 Mitigação: `scraping.py` isola cada fonte em sua própria função, registra aviso e segue com
 as demais; os dados já coletados permanecem em `data/raw/`.
 
-**8.6 Viés de cobertura da imprensa** *(TP2)* — a contagem de menções por UF reflete a
+**8.6 Viés de cobertura da imprensa** — a contagem de menções por UF reflete a
 atenção editorial, não a carência do território. Mitigação: a menção nunca entra no cálculo
 do índice; aparece apenas como camada de contexto, e a aplicação declara isso na própria tela.
 
-**8.7 Site de origem passar a proibir a coleta** *(TP2)* — o `robots.txt` pode mudar a
+**8.7 Site de origem passar a proibir a coleta** — o `robots.txt` pode mudar a
 qualquer momento. Mitigação: a permissão é reconsultada a cada execução, não fica em cache
 entre execuções; se o caminho passar a ser proibido, o script pula aquele host e registra a
 recusa, e os dados já coletados permanecem em `data/raw/`.
 
-**8.8 Dado enviado pelo usuário contaminar o ranking** *(TP2)* — mitigação: as linhas
+**8.8 Dado enviado pelo usuário contaminar o ranking** — mitigação: as linhas
 enviadas vivem apenas no estado da sessão, são marcadas com `origem = usuário` e somem ao
 fim da sessão. Nenhum upload altera os arquivos do repositório.
 
@@ -201,7 +208,9 @@ como conteúdo próprio, usa-o como corpus de análise linguística.
 
 ---
 
-## 10. Arquitetura da solução *(TP2)*
+## 10. Arquitetura da solução
+
+*Adicionado em setembro — TP2.*
 
 | Camada | Componente | Responsabilidade |
 | --- | --- | --- |
@@ -210,14 +219,16 @@ como conteúdo próprio, usa-o como corpus de análise linguística.
 | Texto | `texto.py` | Stopwords, tokenização, menções de UF e classificação temática |
 | Dados | `data/raw`, `data/processed` | Camada bruta e camada tratada, ambas versionadas |
 | Serviço | `utils.py` | Cache, estado de sessão, índice de prioridade e reporte |
-| Interface | `app.py` + `pages/` | Seis páginas de navegação, filtros e downloads |
+| Interface | `app.py` + `paginas/` | Seis páginas de navegação, filtros e downloads |
 
 A coleta roda fora da aplicação, por decisão de projeto: o painel não depende de rede,
 sobe em segundos e pode ser publicado sem credenciais.
 
 ---
 
-## 11. Marcos *(TP2)*
+## 11. Marcos
+
+*Adicionado em setembro — TP2.*
 
 | Marco | Estágio TDSP | Situação |
 | --- | --- | --- |
@@ -225,5 +236,3 @@ sobe em segundos e pode ser publicado sem credenciais.
 | Coleta via API e Data Summary Report | Data Acquisition | Concluído |
 | Extração de conteúdo web e corpus textual | Data Acquisition | Concluído |
 | Índice de prioridade e interface interativa | Modeling | Concluído |
-| Publicação com Git e deploy | Deployment | Em andamento |
-| Validação com usuário de Sustentabilidade | Customer Acceptance | Previsto |

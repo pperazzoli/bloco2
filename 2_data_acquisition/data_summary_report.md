@@ -1,9 +1,9 @@
 # Data Summary Report — Bússola ESG Educação
 
 **Estágio TDSP:** 2. Data Acquisition & Understanding
-**edited 21-09-2026 (TP2):** acrescentadas as fontes de conteúdo web, o corpus textual e as
-tabelas derivadas. Os caminhos dos arquivos mudaram para `data/`. As seções novas estão
-marcadas com *(TP2)*.
+**edited 21-09-2026:** acrescentadas as fontes de conteúdo web, o corpus textual e as
+tabelas derivadas. Os caminhos dos arquivos mudaram para `data/`. O que entrou nesta revisão
+está indicado no início de cada seção.
 
 ---
 
@@ -25,7 +25,8 @@ Granularidade: UF e região.
 Objetivo de uso: tabela de domínio territorial. Fornece a chave de junção entre as fontes e o
 agrupamento por região usado nas visualizações.
 
-**1.1.3 IBGE — API de Malhas Territoriais** *(TP2)*
+**1.1.3 IBGE — API de Malhas Territoriais**
+*Adicionado em setembro — TP2.*
 Tipo de dado: geoespacial, polígonos em GeoJSON.
 Acesso: API REST, sem chave.
 Granularidade: Unidade da Federação.
@@ -47,7 +48,9 @@ Granularidade: país.
 Objetivo de uso: benchmark internacional para dimensionar o problema brasileiro na narrativa
 do reporte ESG. **Status: previsto.**
 
-### 1.2 Fontes não estruturadas (extração web) *(TP2)*
+### 1.2 Fontes não estruturadas (extração web)
+
+*Adicionado em setembro — TP2.*
 
 Todas extraídas com **Beautiful Soup** pelo script `scraping.py`, executado fora da
 aplicação. O tipo de dado é o mesmo nas quatro: **texto não estruturado** em português —
@@ -107,6 +110,8 @@ contrato de API pública.
 
 ## 2. Dados estruturados coletados
 
+*Item 2.10 adicionado em setembro — TP2.*
+
 Arquivo [`../data/processed/ods4_uf.csv`](../data/processed/ods4_uf.csv):
 **189 observações, 7 indicadores, 27 UFs, zero nulos**.
 
@@ -143,7 +148,7 @@ traz a mesma relação de fontes da seção 1 em formato tabular, consumida pela
 pelo reporte ESG. *edited 21-09-2026:* passou de 4 para 9 linhas com a entrada das fontes
 web e da malha territorial.
 
-**2.10 Malha territorial** *(TP2)* —
+**2.10 Malha territorial** —
 [`../data/raw/malha_uf.geojson`](../data/raw/malha_uf.geojson), 27 feições, 106 KB.
 Tratamento aplicado na coleta: o IBGE entrega os anéis dos polígonos no sentido
 anti-horário, que o motor de mapas do Plotly interpreta como "todo o globo menos o
@@ -151,7 +156,9 @@ polígono"; `coleta.py` inverte o sentido dos anéis antes de gravar.
 
 ---
 
-## 3. Dados não estruturados coletados *(TP2)*
+## 3. Dados não estruturados coletados
+
+*Adicionado em setembro — TP2.*
 
 Arquivo [`../data/raw/noticias_educacao.csv`](../data/raw/noticias_educacao.csv):
 **105 matérias, 4 fontes, 59.185 palavras**, período de 05/08/2026 a 21/09/2026.
@@ -221,7 +228,9 @@ interface. As menções de UF casam o nome por extenso e a sigla entre parêntes
 
 ---
 
-## 4. Dados fornecidos pelo usuário *(TP2)*
+## 4. Dados fornecidos pelo usuário
+
+*Adicionado em setembro — TP2.*
 
 A aplicação aceita CSV pela página de upload. Colunas obrigatórias: `indicador`, `uf`, `ano`
 e `valor`; as demais recebem valor padrão. As linhas sem valor numérico são descartadas com
