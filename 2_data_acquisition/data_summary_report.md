@@ -366,3 +366,78 @@ qualquer afirmação sobre tendência temporal. Nenhuma tarefa de LLM prevista d
 histórica; se alguma passar a depender, a coleta precisa ser reexecutada periodicamente para
 acumular histórico, o que `scraping.py` já suporta — ele reaproveita as matérias presentes no
 CSV e busca apenas as novas.
+
+---
+
+## 7. O corpus como insumo do modelo: o que a execução revelou
+
+*Adicionado em novembro — TP4.*
+
+A seção 6 avaliou o dado antes de haver modelo. Esta registra o que mudou quando um modelo
+foi de fato executado sobre o corpus. A escolha do modelo e os seus números estão em
+[`../3_modeling/modelo_llm.md`](../3_modeling/modelo_llm.md); aqui fica o que diz respeito ao
+dado.
+
+**7.1 A estimativa de 6.1 estava certa, e com margem maior do que a prevista.** A seção 6.1
+concluiu que não há necessidade de banco vetorial nesta escala. A execução confirmou por um
+caminho mais barato ainda: a tarefa implementada nem precisa do corpo integral das matérias.
+O modelo adotado tem janela de 512 *tokens*, e o **lead** de cada matéria — título mais
+resumo — cabe inteiro nela. As 59 mil palavras continuam disponíveis e continuam sendo o
+ativo do projeto; só não são todas necessárias para esta tarefa.
+
+**7.2 O corpo integral não cabe, e isso foi medido, não estimado.** Com `campo=texto`, as
+cinco matérias testadas geraram de **726 a 1.238 *tokens***, todas acima do limite de 512 —
+coerente com a média de 563 palavras registrada na seção 3. O serviço trunca e **declara que
+truncou**, em `tokens` e `texto_truncado`, por linha. É a diferença entre um rótulo que
+parece valer para a matéria toda e um rótulo que diz a que parte do texto se refere.
+
+**7.3 O resumo da redação acabou servindo às duas coisas que se previu.** A seção 6.3
+registrou a coluna `resumo` como referência humana para a futura tarefa de sumarização. Com
+as duas tarefas implementadas, ela virou as duas:
+
+- **Insumo** da classificação: é o que, junto do título, forma o texto enviado ao modelo de
+  sentimento. A dependência que isso cria fica registrada — matérias sem `resumo` preenchido
+  são analisadas só pelo título, com menos sinal. É aceitável porque o título de matéria
+  jornalística já carrega o tom editorial.
+- **Referência** da sumarização, como previsto: na página *Análise de linguagem*, o resumo
+  gerado pelo modelo aparece ao lado do resumo que a redação publicou, quando a matéria vem
+  do corpus. Foi essa comparação que tornou visíveis as invenções do modelo descritas na
+  seção 5.2 de [`../3_modeling/modelo_llm.md`](../3_modeling/modelo_llm.md).
+
+Vale o registro de que essa referência **saiu de graça da forma como o dado foi coletado**.
+Ela existe porque três das quatro fontes são feeds de sindicação, e um feed publica o resumo
+da redação junto da matéria. A decisão de coletar por feed, tomada no TP2 por um motivo
+inteiramente diferente — evitar páginas dinâmicas, seção 1.4 —, é o que deu ao projeto uma
+referência humana para avaliar um modelo, sem uma hora de anotação manual.
+
+**7.4 A composição das fontes explica o resultado, e precisava ser dita.** Das 105 matérias,
+metade vem de agência oficial e boa parte do restante é comunicação de fundações e institutos
+— registrado desde a seção 3. A consequência só ficou visível com o modelo em execução: **25
+de 30 matérias foram classificadas como neutras**, e nenhuma como negativa. Isso é descrição
+correta do corpus, não insensibilidade do modelo, e foi exatamente o critério que eliminou o
+candidato concorrente, que classificou 26 das mesmas 30 como positivas. Um corpus de
+comunicação institucional exige um modelo com classe neutra funcional; a característica do
+dado determinou a escolha da ferramenta.
+
+**7.5 O texto gerado pelo modelo não é dado do projeto, e a diferença é de natureza.** Nem a
+classificação nem o resumo são gravados em `data/`. A classificação vive na resposta HTTP, na
+sessão do usuário e no CSV que ele baixa se quiser; o resumo vive na tela. É a mesma regra da
+seção 4 — resultado de modelo não é dado apurado e não entra no repositório ao lado dos
+indicadores oficiais —, e no caso do resumo ela é mais que organização de pastas.
+
+Todo registro deste relatório tem procedência: uma fonte, uma data de coleta, uma URL. **Um
+resumo gerado não tem procedência que se possa registrar**: não é do veículo, que não o
+escreveu, e não é apuração do projeto. Gravá-lo em `data/` criaria uma linha sem origem num
+inventário cuja regra é que toda linha tem origem — e a verificação mostrou o resumo
+inventando um estado, uma cidade estrangeira e uma cifra, exatamente o tipo de conteúdo que
+não pode circular com aparência de dado. Fica, portanto, fora do inventário, por decisão e
+não por acaso.
+
+É dessa mesma exigência de procedência que nasceu a **conferência automática** descrita na
+seção 5.3 de [`../3_modeling/modelo_llm.md`](../3_modeling/modelo_llm.md): se um resumo não
+pode ter fonte registrada como têm as linhas de `data/`, que ao menos venha com a lista dos
+seus números, datas e nomes próprios dizendo quais aparecem na matéria de origem. É o mais
+perto de rastreabilidade que texto gerado permite chegar.
+
+**7.6 O inventário permanece válido sem alteração.** Nenhuma fonte nova, nenhum arquivo
+alterado: os nove arquivos de `data/` continuam com o conteúdo e a data do TP2.

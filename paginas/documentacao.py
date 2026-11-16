@@ -3,6 +3,8 @@
 # edited 16-11-2026: a lista de documentos passou de dois para quatro com a entrada do plano
 # de uso de llm e da referencia da api; a lista vem de utils.DOCS, nada mudou aqui alem da
 # arvore de estrutura do repositorio
+# edited 16-11-2026 (TP4): quinto documento, a escolha do modelo de linguagem. como antes, a
+# lista vem de utils.DOCS e so a arvore de estrutura mudou neste arquivo
 
 import streamlit as st
 
@@ -45,21 +47,22 @@ st.code(
 tp1/
 ├── 1_business_understanding/    project_charter.md
 ├── 2_data_acquisition/          data_summary_report.md
-├── 3_modeling/                  plano_llm.md
+├── 3_modeling/                  plano_llm.md, modelo_llm.md
 ├── 4_deployment/                api_reference.md
 ├── 5_customer_acceptance/
 ├── data/
 │   ├── raw/                     noticias_educacao.csv, noticias_corpus.txt, malha_uf.geojson
 │   └── processed/               ods4_uf.csv, fontes.csv, noticias_*.csv,
 │                                 robots_verificacao.csv
-├── paginas/                     as sete paginas da aplicacao streamlit
+├── paginas/                     as oito paginas da aplicacao streamlit
 ├── app.py                       roteador multipagina
-├── api.py                       servico HTTP com FastAPI (10 rotas)
+├── api.py                       servico HTTP com FastAPI (14 rotas)
+├── modelo_llm.py                dois modelos de linguagem locais, sem framework web
 ├── nucleo.py                    leitura dos arquivos e calculo, sem streamlit
 ├── coleta.py                    coleta via API do IBGE
 ├── scraping.py                  extracao web com Beautiful Soup (checa robots.txt)
-├── texto.py                     utilidades de texto
-└── utils.py                     cache do streamlit e estado de sessao
+├── texto.py                     utilidades de texto e conferencia do resumo gerado
+└── utils.py                     cache do streamlit, estado de sessao e chamada a API
 """,
     language=None,
 )

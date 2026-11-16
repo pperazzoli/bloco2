@@ -22,10 +22,14 @@ DOCS = {
     "Project Charter": RAIZ / "1_business_understanding" / "project_charter.md",
     "Data Summary Report": RAIZ / "2_data_acquisition" / "data_summary_report.md",
     "Plano de uso de LLM": RAIZ / "3_modeling" / "plano_llm.md",
+    "Escolha do modelo de linguagem": RAIZ / "3_modeling" / "modelo_llm.md",
     "Referência da API": RAIZ / "4_deployment" / "api_reference.md",
 }
 
 METODOS_INDICE = ["min-max entre UFs", "distancia de 100%"]
+
+# edited 16-11-2026 (TP4): campos do corpus que podem ser dados ao modelo de linguagem
+CAMPOS_ANALISE = ["titulo e resumo", "texto"]
 
 
 # ---------------------------------------------------------------- leitura dos arquivos
@@ -132,6 +136,16 @@ def estatisticas_noticias(noticias):
         "primeira": noticias["data"].min(),
         "ultima": noticias["data"].max(),
     }
+
+
+def texto_para_analise(noticias, campo="titulo e resumo"):
+    # edited 16-11-2026 (TP4): monta o texto que vai ao modelo de linguagem.
+    # o padrao e titulo mais resumo porque o lead da materia carrega o tom editorial e cabe
+    # inteiro na janela de 512 tokens do modelo; o corpo integral, com 563 palavras em media,
+    # passa dessa janela e seria truncado pela metade.
+    complemento = "texto" if campo == "texto" else "resumo"
+    titulos = noticias["titulo"].fillna("").str.strip().str.rstrip(".")
+    return (titulos + ". " + noticias[complemento].fillna("").str.strip()).str.strip()
 
 
 def contagem_por_coluna(noticias, coluna, nomes):

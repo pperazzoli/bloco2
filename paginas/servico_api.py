@@ -1,17 +1,19 @@
 # paginas/servico_api.py - consumo da api do fastapi dentro da aplicacao
 # criado 16-11-2026 (TP3)
-#
+# edited 16-11-2026 (TP4): entraram as quatro rotas de linguagem natural na tabela e a
+# funcao de chamada foi para utils.chamar_api, para que a pagina de analise de linguagem use
+# a mesma. O nome local fica como atalho, as chamadas desta pagina nao mudaram.
+
 # Esta pagina e um cliente HTTP da api.py: nao le os arquivos de data/ diretamente, chama o
 # servico. E o que fecha a integracao pedida no TP3 e o que permite testar as rotas sem sair
 # da aplicacao nem abrir o Swagger.
 
 import pandas as pd
-import requests
 import streamlit as st
 
 import utils
 
-TEMPO_LIMITE = 10
+chamar = utils.chamar_api
 
 # as consultas oferecidas no explorador, com os parametros que cada uma aceita.
 # 'campos' declara o tipo de controle que a pagina deve desenhar para cada parametro.
@@ -32,6 +34,7 @@ CONSULTAS = {
         "campos": {"fonte": "fontes_noticia", "uf": "uf_unica", "busca": "texto", "limite": "limite"},
     },
     "GET /indicadores/enviados": {"caminho": "/indicadores/enviados", "campos": {}},
+    "GET /modelo": {"caminho": "/modelo", "campos": {}},
 }
 
 ROTAS = [
@@ -45,22 +48,11 @@ ROTAS = [
     ["POST", "/indicadores", "Envia novas observações para a base volátil do serviço"],
     ["GET", "/indicadores/enviados", "Lista o que foi enviado nesta execução do serviço"],
     ["DELETE", "/indicadores/enviados", "Descarta o que foi enviado nesta execução"],
+    ["GET", "/modelo", "Ficha do modelo de linguagem local e situação da carga"],
+    ["POST", "/modelo/carregar", "Carrega o modelo na memória, ou tenta de novo após falha"],
+    ["POST", "/processar_texto", "Analisa um texto com o modelo de linguagem local"],
+    ["POST", "/noticias/sentimento", "Aplica o modelo ao corpus de notícias coletado"],
 ]
-
-
-def chamar(base, caminho, metodo="GET", parametros=None, corpo=None):
-    # unico ponto de saida para a rede nesta pagina. devolve (ok, resposta_ou_erro)
-    try:
-        resposta = requests.request(
-            metodo, f"{base.rstrip('/')}{caminho}",
-            params=parametros, json=corpo, timeout=TEMPO_LIMITE,
-        )
-    except requests.exceptions.RequestException as erro:
-        return False, f"{type(erro).__name__}: {erro}"
-    try:
-        return resposta.ok, {"status": resposta.status_code, "corpo": resposta.json()}
-    except ValueError:
-        return False, f"resposta HTTP {resposta.status_code} não é JSON"
 
 
 st.title("🔌 Serviço de API")
@@ -103,7 +95,7 @@ rotas, explorador, envio = st.tabs(["Rotas disponíveis", "Explorador de consult
 # ------------------------------------------------------------------ aba 1: documentacao
 
 with rotas:
-    st.subheader("As dez rotas do serviço")
+    st.subheader("As quatorze rotas do serviço")
     st.dataframe(
         pd.DataFrame(ROTAS, columns=["Método", "Rota", "Função"]),
         hide_index=True,
@@ -128,8 +120,15 @@ with rotas:
     )
     st.code(
         "data/  →  nucleo.py  →  utils.py  →  app.py + paginas/     (painel Streamlit)\n"
-        "                    ↘  api.py                              (serviço HTTP FastAPI)",
+        "                    ↘  api.py                              (serviço HTTP FastAPI)\n"
+        "                       ↑\n"
+        "            modelo_llm.py                                  (modelo de linguagem local)",
         language=None,
+    )
+    st.caption(
+        "As quatro rotas de linguagem natural são exercitadas na página *Análise de "
+        "linguagem*. São as únicas que dependem do modelo: se ele não carregar, respondem 503 "
+        "e as dez restantes continuam atendendo."
     )
 
 # ------------------------------------------------------------------ aba 2: consultas get

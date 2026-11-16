@@ -5,11 +5,15 @@
 # nucleo.py, que nao depende de streamlit e por isso tambem serve a api do fastapi.
 # Este arquivo passou a ser so a camada de cache e de estado de sessao por cima do nucleo:
 # a assinatura de todas as funcoes publicas foi preservada, nenhuma pagina mudou.
+# edited 16-11-2026 (TP4): entrou chamar_api, que estava dentro de paginas/servico_api.py.
+# Com a segunda pagina cliente da api - a de analise de linguagem - as duas passaram a
+# precisar da mesma funcao, e duas copias divergiriam no tratamento de erro.
 
 import io
 from datetime import date
 
 import pandas as pd
+import requests
 import streamlit as st
 from wordcloud import WordCloud
 
@@ -171,6 +175,45 @@ def nuvem_png(pares, largura=1000, altura=500, paleta="viridis", max_palavras=12
     memoria = io.BytesIO()
     imagem.save(memoria, format="PNG")
     return memoria.getvalue()
+
+
+# ---------------------------------------------------------------- chamada a api
+
+# as rotas de dados respondem em milissegundos; as de linguagem natural podem levar segundos
+# na primeira carga do modelo, por isso o prazo e um parametro e nao uma constante.
+TEMPO_LIMITE_API = 10
+
+
+def chamar_api(base, caminho, metodo="GET", parametros=None, corpo=None, tempo_limite=TEMPO_LIMITE_API):
+    """Unico ponto de saida para a rede nas paginas. Devolve (ok, resposta_ou_mensagem).
+
+    Nenhuma excecao de rede escapa: a pagina recebe sempre um par, e decide o que mostrar.
+    E o que permite a aplicacao continuar util com o servico fora do ar.
+    """
+    try:
+        resposta = requests.request(
+            metodo, f"{base.rstrip('/')}{caminho}",
+            params=parametros, json=corpo, timeout=tempo_limite,
+        )
+    except requests.exceptions.RequestException as erro:
+        return False, f"{type(erro).__name__}: {erro}"
+    try:
+        return resposta.ok, {"status": resposta.status_code, "corpo": resposta.json()}
+    except ValueError:
+        return False, f"resposta HTTP {resposta.status_code} não é JSON"
+
+
+def detalhe_do_erro(resultado):
+    """Extrai a mensagem legivel de uma resposta de erro da api, qualquer que seja a forma."""
+    if isinstance(resultado, str):
+        return resultado
+    corpo = resultado.get("corpo", {})
+    detalhe = corpo.get("detail", corpo) if isinstance(corpo, dict) else corpo
+    if isinstance(detalhe, dict) and "motivo" in detalhe:
+        return f"{detalhe.get('erro', 'erro')} — {detalhe['motivo']}"
+    if isinstance(detalhe, list) and detalhe and isinstance(detalhe[0], dict):
+        return "; ".join(f"{'.'.join(str(p) for p in d.get('loc', []))}: {d.get('msg', '')}" for d in detalhe)
+    return str(detalhe)
 
 
 # ---------------------------------------------------------------- saidas

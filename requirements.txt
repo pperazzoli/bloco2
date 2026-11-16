@@ -1,5 +1,10 @@
 # edited 21-09-2026: acrescentadas as bibliotecas de scraping e nuvem de palavras
 # edited 16-11-2026: acrescentadas as bibliotecas do servico de api (fastapi + uvicorn)
+# edited 16-11-2026 (TP4): acrescentadas as bibliotecas do modelo de linguagem local.
+# torch e a build de CPU, instalada de https://download.pytorch.org/whl/cpu - nao ha
+# dependencia de GPU em nenhum ponto do projeto. sentencepiece nao e usado diretamente pelo
+# codigo: o tokenizador do modelo escolhido e SentencePiece e o transformers precisa dele
+# para converter o vocabulario, sem ele a carga falha.
 streamlit>=1.40
 pandas>=2.2
 plotly>=5.24
@@ -10,3 +15,6 @@ wordcloud>=1.9
 matplotlib>=3.8
 fastapi>=0.115
 uvicorn>=0.32
+transformers>=4.44
+torch>=2.4
+sentencepiece>=0.2

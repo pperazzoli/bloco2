@@ -1,6 +1,9 @@
 # texto.py - utilidades de texto puro, sem dependencia de streamlit
 # usado tanto pelo scraping.py (offline) quanto pela aplicacao (online)
 # criado 21-09-2026
+# edited 16-11-2026 (TP4): entrou conferir_resumo, que compara um resumo gerado por modelo
+# com o texto de origem. Mora aqui, e nao em modelo_llm.py, porque nao usa modelo nenhum:
+# e comparacao lexica, da mesma familia de mencoes_uf e temas_do_texto.
 
 import re
 import unicodedata
@@ -117,3 +120,119 @@ def mencoes_uf(conteudo):
 def temas_do_texto(conteudo):
     plano = normalizar(conteudo)
     return sorted(t for t, termos in TEMAS_ODS4.items() if any(k in plano for k in termos))
+
+
+# ---------------------------------------------------------------- conferencia de resumo
+
+# Numeros por extenso e ordinais. "um" e "uma" ficam de fora porque sao artigo antes de
+# serem numero, e "segundo" tambem: em texto jornalistico quase sempre significa "conforme".
+NUMEROS_POR_EXTENSO = frozenset(
+    """
+dois duas tres quatro cinco seis sete oito nove dez onze doze treze catorze quatorze quinze
+dezesseis dezessete dezoito dezenove vinte trinta quarenta cinquenta sessenta setenta
+oitenta noventa cem cento duzentos trezentos quatrocentos quinhentos seiscentos setecentos
+oitocentos novecentos mil milhao milhoes bilhao bilhoes dezena dezenas centena centenas
+metade dobro triplo terco
+primeiro primeira terceiro terceira quinto quinta sexto sexta setimo setima oitavo oitava
+nono nona decimo decima ultimo ultima unico unica
+""".split()
+)
+
+# Datas que um modelo gerativo costuma inventar quando o texto nao as traz.
+EXPRESSOES_DE_DATA = frozenset(
+    """
+segunda-feira terca-feira quarta-feira quinta-feira sexta-feira sabado domingo
+janeiro fevereiro marco abril maio junho julho agosto setembro outubro novembro dezembro
+ontem hoje amanha
+""".split()
+)
+
+# token com hifen preservado, para que "quarta-feira" nao vire "quarta"
+TOKEN = re.compile(r"\w+(?:-\w+)*", re.UNICODE)
+DIGITOS = re.compile(r"\d[\d.,]*\d|\d")
+
+# nome proprio: palavra iniciada por maiuscula, encadeando as seguintes e os conectores
+# que ficam no meio de nome composto - "Rio Grande do Sul" conta como um item so
+_MAIUSCULA = r"[A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ]"
+_PROPRIA = rf"{_MAIUSCULA}\w*(?:-\w+)*"
+_CONECTOR = r"(?:de|do|da|dos|das|e|em|no|na|nos|nas)"
+NOME_PROPRIO = re.compile(rf"{_PROPRIA}(?:\s+(?:{_CONECTOR}\s+)?{_PROPRIA})*")
+
+RESSALVA_CONFERENCIA = (
+    "Comparação léxica, não semântica: confere se o termo aparece no texto de origem, não se "
+    "o resumo é fiel ao sentido dele. Erra de propósito para o lado de apontar demais — um "
+    "termo apontado que está no texto custa um olhar, um termo inventado que passa custa uma "
+    "afirmação falsa."
+)
+
+
+# lista curta de proposito: usar STOPWORDS inteira comeria "São" de "São Paulo", porque
+# "sao" esta la como forma do verbo ser
+ARTIGOS_INICIAIS = frozenset("o a os as um uma uns umas no na do da de em ao aos".split())
+
+
+def _sem_artigo_inicial(grupo):
+    # "O Itaú Social" no comeco da frase entra com o artigo colado; o nome e "Itaú Social"
+    partes = grupo.strip().split()
+    while len(partes) > 1 and normalizar(partes[0]) in ARTIGOS_INICIAIS:
+        partes.pop(0)
+    return " ".join(partes)
+
+
+def _aparece(termo, plano):
+    # busca por palavra inteira: "Estado" nao casa com "estadual", e e para nao casar mesmo
+    alvo = normalizar(termo).strip()
+    if not alvo:
+        return True
+    return re.search(rf"(?<!\w){re.escape(alvo)}(?!\w)", plano) is not None
+
+
+def conferir_resumo(resumo, original):
+    """Confere se cada afirmacao verificavel do resumo aparece no texto de origem.
+
+    Nao usa modelo: procura no resumo os tres tipos de termo que um modelo gerativo inventa
+    com mais frequencia - numero, data e nome proprio - e checa cada um contra o original.
+    Devolve a lista conferida, com os ausentes primeiro, e a contagem.
+    """
+    plano = normalizar(original)
+    itens = []
+    vistos = set()
+
+    def registrar(tipo, termo):
+        limpo = str(termo).strip()
+        chave = (tipo, normalizar(limpo))
+        if not limpo or chave in vistos:
+            return
+        vistos.add(chave)
+        itens.append({"tipo": tipo, "termo": limpo, "no_original": _aparece(limpo, plano)})
+
+    for numero in DIGITOS.findall(resumo):
+        registrar("número", numero)
+
+    for token in TOKEN.findall(resumo):
+        achatado = normalizar(token)
+        if achatado in NUMEROS_POR_EXTENSO:
+            registrar("número", token)
+        elif achatado in EXPRESSOES_DE_DATA:
+            registrar("data", token)
+
+    for grupo in NOME_PROPRIO.findall(resumo):
+        limpo = _sem_artigo_inicial(grupo)
+        achatado = normalizar(limpo)
+        # descarta o que ja foi contado como numero ou data e a maiuscula de inicio de frase
+        if len(limpo) < 3 or achatado in STOPWORDS:
+            continue
+        if achatado in NUMEROS_POR_EXTENSO or achatado in EXPRESSOES_DE_DATA:
+            continue
+        registrar("nome próprio", limpo)
+
+    ausentes = sum(1 for item in itens if not item["no_original"])
+    itens.sort(key=lambda item: (item["no_original"], item["tipo"], normalizar(item["termo"])))
+    return {
+        "situacao": "revisar" if ausentes else "sem divergência",
+        "conferidos": len(itens),
+        "ausentes": ausentes,
+        "itens": itens,
+        "metodo": "números, datas e nomes próprios do resumo procurados no texto de origem",
+        "ressalva": RESSALVA_CONFERENCIA,
+    }

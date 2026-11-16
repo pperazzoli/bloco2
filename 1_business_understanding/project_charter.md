@@ -57,6 +57,56 @@ risco 8.4, e por isso a preparação foi documentada antes de qualquer código:
 [`../3_modeling/plano_llm.md`](../3_modeling/plano_llm.md) registra as tarefas previstas, os
 insumos de cada uma e as contenções exigidas.
 
+### 1.2 Segunda reavaliação: o modelo de linguagem local
+
+*Adicionado em novembro — TP4.*
+
+O problema de negócio continua o mesmo. O que a exigência de **execução local** mudou foi
+qual tarefa de linguagem o projeto podia de fato entregar nesta etapa, e a mudança foi na
+direção oposta à prevista.
+
+**1.2.1 A ordem planejada se inverteu, e isso é decisão de negócio, não detalhe técnico.** O
+`plano_llm.md` pôs em primeiro lugar as tarefas gerativas — a narrativa do reporte ESG e o
+resumo das matérias —, porque são as que mais poupam tempo do analista. Ambas exigem modelo
+gerativo, e um modelo gerativo útil em português leva dezenas de segundos por item num
+processador sem GPU. A tarefa de classificação, terceira na lista, roda em dezenas de
+milissegundos. Em um ambiente local sem GPU, a tarefa menos valiosa é a única viável.
+
+**1.2.2 Duas tarefas entraram, e elas não têm o mesmo risco.** A classificação de sentimento
+foi implementada primeiro. A tarefa de **resumo**, gerativa, entrou em seguida, depois que a
+medição mostrou um modelo em português que resume uma matéria em cerca de 4 segundos em CPU —
+custo aceitável para uma matéria por vez, proibitivo para o corpus em lote. O resumo é
+oferecido nesse formato e só nesse.
+
+A distinção entre as duas atravessa o sistema inteiro, no campo `gerativo` que a API devolve
+e a tela exibe. Um classificador escolhe entre três rótulos fixos: **não há número a inventar
+nem frase a fabricar**. Um modelo de resumo redige, e pode afirmar o que não está no texto.
+
+**1.2.3 O risco 8.4 foi reaberto pela própria entrega.** Uma versão anterior deste documento
+registrou que a escolha de um classificador *eliminava* o risco 8.4 em vez de administrá-lo.
+Isso valia enquanto havia só o classificador. Com a entrada do resumo deixou de valer: na
+verificação, o modelo produziu **uma data, um estado e uma cifra que não estavam no texto de
+entrada**. Os dois casos estão transcritos na seção 5.2 de
+[`../3_modeling/modelo_llm.md`](../3_modeling/modelo_llm.md), e o risco 8.4 abaixo foi
+atualizado com o que a entrega faz a respeito.
+
+**1.2.4 O que o usuário ganha, em escala honesta.** O rótulo de sentimento acrescenta direção
+ao volume de menções que a página de notícias já mostrava: deixa de ser "o estado aparece em
+12 matérias" e passa a ser "aparece em 12, das quais 2 em tom negativo". É camada de
+contexto, não de medição — e, no corpus atual, formado em boa parte por comunicação
+institucional, a maioria das matérias é classificada como neutra, o que é descrição correta
+do material. O resumo serve a uma decisão menor e concreta: **se vale ler a matéria inteira**.
+Para citar, não serve, e a interface diz isso ao mostrar o resumo gerado ao lado do resumo
+escrito pela redação. A decisão completa, com os quatro modelos medidos e os números de cada
+um, está em [`../3_modeling/modelo_llm.md`](../3_modeling/modelo_llm.md).
+
+**1.2.5 O que ficou fora, e por quê.** A narrativa do reporte ESG — a tarefa de maior valor
+para o usuário — continua fora, e agora por um motivo mais forte que o custo: **um modelo que
+inventa cifras ao resumir não pode redigir um relatório que cita cifras.** Fazê-la exigiria
+ou um modelo muito maior, com GPU ou provedor remoto, ou uma arquitetura em que todo valor do
+texto gerado seja verificado contra a tabela de origem antes de ser exibido. A segunda é a
+que respeita o risco 8.4, e é trabalho de outra entrega.
+
 ---
 
 ## 2. Escopo
@@ -117,12 +167,28 @@ informação do painel sem passar pela interface.
 **3.8** Preparar o projeto para as tarefas de LLM da etapa seguinte, especificando
 tarefas, insumos e contenções antes de implementá-las.
 
+**3.9** Processar o corpus de notícias com modelos de linguagem **executados na própria
+máquina**, sem envio de conteúdo a serviço externo: classificação de sentimento, que
+acrescenta direção qualitativa ao volume de menções que o painel já media, e resumo, que
+reduz o custo de triagem de uma matéria.
+
+**3.10** Garantir que a indisponibilidade de um modelo degrade apenas a funcionalidade dele,
+mantendo intactas as rotas e as páginas de dados — e a outra tarefa de linguagem.
+
+**3.11** Tornar visível, na própria interface, o que cada modelo erra: que texto gerado pode
+conter afirmação ausente do original, e que `neutro` descreve o registro do texto e não a
+situação do território.
+
+**3.12** Entregar todo texto gerado por modelo acompanhado da conferência dos seus números,
+datas e nomes próprios contra o texto que o originou, de modo que o que o modelo inventou
+apareça apontado e não dependa da atenção de quem lê.
+
 ---
 
 ## 4. Metas e indicadores de sucesso
 
 *Metas 4.8 e 4.9 adicionadas em setembro — TP2. Metas 4.10 e 4.11 adicionadas em
-novembro — TP3.*
+novembro — TP3. Metas 4.12 a 4.16 adicionadas em novembro — TP4.*
 
 **4.1 Cobertura territorial** — indicador: % de UFs com índice calculado. Alvo: 100%, as 27 UFs.
 
@@ -150,13 +216,40 @@ com os dados já em cache. Alvo: menos de 1 segundo.
 
 **4.10 Cobertura do serviço** — indicador: número de rotas HTTP documentadas que cobrem os
 ativos do projeto (indicadores, índice, corpus, catálogo de fontes). Alvo: pelo menos 2
-rotas, com ao menos uma de consulta e uma de escrita. **Situação atual: 10 rotas, 8 de
-consulta e 2 de escrita, todas com documentação interativa gerada pelo FastAPI.**
+rotas, com ao menos uma de consulta e uma de escrita. **Situação atual: 14 rotas, 8 de
+consulta, 2 de escrita e 4 de linguagem natural, todas com documentação interativa gerada
+pelo FastAPI.**
 
 **4.11 Paridade entre canais** — indicador: diferença entre o índice devolvido pela rota
 `/ranking` e o índice exibido na página de prioridade, com os mesmos pesos e método. Alvo:
 zero. Garantido por construção — os dois chamam a mesma função de `nucleo.py`, e não há
 segunda implementação do cálculo no projeto.
+
+**4.12 Custo do processamento de linguagem** — indicador: tempo por item em processador
+comum, sem GPU. Alvo: que caiba numa interação de painel. **Situação atual: 0,08 s para
+classificar uma matéria — o corpus inteiro, 105 matérias, em cerca de 9 segundos — e cerca de
+3 segundos para resumir uma, o que mantém o resumo em uma matéria por vez.**
+
+**4.13 Contrato declarado das respostas** — indicador: % das rotas cujo formato de resposta
+está declarado na especificação OpenAPI, e não só na documentação escrita. Alvo: 100%.
+**Situação atual: 100% — as 14 operações declaram `response_model`, com 26 esquemas gerados.**
+
+**4.14 Degradação contida** — indicador: número de rotas e de páginas que deixam de funcionar
+quando um modelo não pode ser carregado. Alvo: nenhuma além das que dependem dele.
+**Situação atual: verificado com o serviço rodando sem os pesos e sem rede — as 10 rotas de
+dados responderam normalmente e as 4 de linguagem responderam 503 com o motivo, nas duas
+tarefas. A carga é por tarefa, de modo que a falha de um modelo não derruba o outro.**
+
+**4.15 Visibilidade do erro do modelo** — indicador: o limite de cada modelo está demonstrado
+na interface, não apenas descrito na documentação. Alvo: sim para os dois. **Situação atual:
+no sentimento, dois exemplos prontos mostram o mesmo fato recebendo rótulos diferentes
+conforme a moldura; no resumo, o texto gerado aparece ao lado do resumo escrito pela redação,
+e a truncagem é dita em proporção — "o modelo viu 44% do texto".**
+
+**4.16 Respaldo do texto gerado** — indicador: % dos resumos entregues com a conferência dos
+seus números, datas e nomes próprios contra o texto de origem. Alvo: 100%, sem possibilidade
+de desligar. **Situação atual: 100% — a conferência é anexada dentro da função que gera o
+resumo, não pela rota, e aparece tanto na resposta da API quanto na tela.**
 
 ---
 
@@ -248,6 +341,38 @@ que a sustentam, e resposta sem citação não é exibida; todo texto gerado apa
 como tal, com data e modelo, na interface e no reporte; e a geração fica atrás de ação
 explícita do usuário, nunca de recarregamento de página.
 
+*edited 16-11-2026 (TP4):* **o risco se materializou e está medido.** A entrega tem duas
+tarefas de linguagem. A de sentimento é um classificador e não pode inventar nada. A de
+resumo é gerativa, e na verificação produziu uma data, um estado e uma cifra ausentes do
+texto de entrada — os dois casos estão transcritos na seção 5.2 de
+[`../3_modeling/modelo_llm.md`](../3_modeling/modelo_llm.md). O texto gerado era gramatical e
+plausível, que é precisamente o que torna o risco perigoso.
+
+Situação das quatro regras:
+
+- **Valor nunca calculado pelo modelo** — cumprida por construção: nenhum número do projeto
+  passa por modelo. Os indicadores e o índice são apurados por `nucleo.py`, e o resumo não
+  alimenta nada: não entra no reporte, não é gravado, não é insumo de cálculo.
+- **Citação da matéria que sustenta a afirmação** — cumprida: todo resumo gerado a partir do
+  corpus aparece com a matéria de origem, e ao lado do resumo escrito pela própria redação.
+- **Identificação do que é gerado** — cumprida: o campo `gerativo` vem verdadeiro na resposta,
+  o `aviso` declara que o resumo pode afirmar o que não está no original, e a tela exibe os
+  dois.
+- **Geração atrás de ação explícita** — cumprida: tanto a carga do modelo quanto cada resumo
+  ficam atrás de um botão.
+
+Acrescentou-se uma quinta contenção, que não estava prevista nas quatro e que é a única a
+não depender de o leitor prestar atenção ao aviso: **toda resposta de resumo traz a
+conferência automática dos seus números, datas e nomes próprios contra o texto de origem.**
+O que ela aponta como ausente, o modelo produziu por conta própria. Não usa modelo — é
+comparação léxica, em `texto.conferir_resumo` — e é anexada dentro da própria função que
+gera o resumo, de modo que nenhum consumidor receba um resumo sem ela.
+
+O que **falta**, e fica declarado: a conferência pega termo inventado e não pega relação
+invertida entre duas entidades que estejam ambas no texto. Essa camada semântica é a
+pendência 9.2 do documento do modelo, e é o que ainda separa o resumo de hoje — ferramenta
+de triagem — de um texto que pudesse entrar num reporte.
+
 **8.5 Quebra do seletor de raspagem** — os sites de origem podem mudar de HTML.
 Mitigação: `scraping.py` isola cada fonte em sua própria função, registra aviso e segue com
 as demais; os dados já coletados permanecem em `data/raw/`.
@@ -255,6 +380,14 @@ as demais; os dados já coletados permanecem em `data/raw/`.
 **8.6 Viés de cobertura da imprensa** — a contagem de menções por UF reflete a
 atenção editorial, não a carência do território. Mitigação: a menção nunca entra no cálculo
 do índice; aparece apenas como camada de contexto, e a aplicação declara isso na própria tela.
+*edited 16-11-2026 (TP4):* o rótulo de sentimento está sob a mesma regra e a amplia — além de
+não entrar no índice, carrega o aviso em toda resposta da API e na tela. Há um modo de erro
+específico a vigiar: `neutro` significa "texto escrito em registro informativo", **não**
+"situação estável no território". A seção 4.1 de
+[`../3_modeling/modelo_llm.md`](../3_modeling/modelo_llm.md) mostra a mesma notícia de evasão
+escolar classificada como `negativo` quando escrita de forma direta e como `neutro` quando
+trazida na moldura jornalística; as duas frases estão lado a lado na interface, como exemplos,
+para que quem usa a tela veja o limite em vez de ler sobre ele.
 
 **8.7 Site de origem passar a proibir a coleta** — o `robots.txt` pode mudar a
 qualquer momento. Mitigação: a permissão é reconsultada a cada execução, não fica em cache
@@ -287,7 +420,44 @@ cliente e CORS restrito à origem do painel — registrado como pendência expl�
 Mitigação: a dependência está confinada a uma página. A página *Serviço de API* detecta a
 ausência do serviço, informa na tela e instrui como subi-lo; as outras seis seguem lendo os
 arquivos de `data/` diretamente. A mesma regra vale para a etapa de LLM: falha de chamada
-degrada a funcionalidade de texto e não derruba o painel.
+degrada a funcionalidade de texto e não derruba o painel. *edited 16-11-2026 (TP4):* a regra
+foi cumprida e verificada. São agora duas as páginas dependentes do serviço — *Serviço de
+API* e *Análise de linguagem* —, ambas com o mesmo aviso de tela, e as outras seis continuam
+sem tocar a rede. Do lado do serviço, a verificação foi feita rodando-o com o cache de
+modelos vazio e sem acesso à internet: as 10 rotas de dados responderam normalmente e as 4
+de linguagem responderam 503 com o motivo.
+
+**8.12 Modelo de linguagem indisponível no ambiente de quem executa** — os pesos somam cerca
+de 2 GB nos dois modelos e não entram no repositório; a primeira carga depende de rede, e a
+máquina pode não ter memória suficiente. Mitigação: a carga é preguiçosa, por tarefa, e seu
+fracasso é contido — nenhuma rota de dados e nenhuma página de análise depende de modelo, e a
+falha de um modelo não afeta o outro. A resposta 503 nomeia os modelos do serviço, o motivo
+da falha, o que fazer e o que continua funcionando; `GET /modelo` informa, antes de qualquer
+tentativa, se os pesos de cada um já estão em disco. O risco é de execução, não de dado: nada
+do que o projeto apura depende de modelo.
+
+**8.13 Rótulo de sentimento ser lido como medida do território** — detalhado no risco 8.6.
+Fica registrado aqui como risco de **interpretação**, que não produz erro visível: um gestor
+que lê `neutro` como "situação estável" toma decisão errada sem que nada no sistema acuse
+falha. Mitigação: o aviso acompanha toda resposta da API e aparece na tela; a página traz os
+dois exemplos que demonstram o limite; e o rótulo nunca entra no cálculo do índice.
+
+**8.14 Resumo gerado ser lido como apuração** — o risco mais grave desta etapa, porque o
+texto gerado é gramatical, plausível e, pela forma, indistinguível de texto apurado. O modelo
+inventa quando o texto de entrada é curto demais para sustentar uma frase de abertura:
+preenche com o que é estatisticamente provável no gênero — um estado, um número, uma data.
+Mitigação, toda implementada: **a conferência automática de cada número, data e nome próprio
+do resumo contra o texto de origem**, anexada a toda resposta; o campo `gerativo` e o `aviso`
+em toda resposta; o resumo gerado exibido ao lado do resumo da redação; busca em feixe no
+lugar da gulosa, que reduziu a invenção ao custo de 2 a 3 segundos por matéria; e o resumo
+não alimentando nada — nem reporte, nem `data/`, nem cálculo.
+
+A conferência é a mitigação que importa, porque as demais dependem de o leitor ler o aviso e
+ela aponta o dedo no termo. Numa execução de verificação pela interface, com uma entrada de
+25 palavras sobre vagas em creche, o modelo produziu "Cochabamba" — cidade boliviana —,
+"Estado de Goiás" e "mil", e os quatro termos saíram marcados como ausentes do original. O
+que ela ainda não pega é relação invertida entre entidades presentes no texto: pendência 9.2
+em [`../3_modeling/modelo_llm.md`](../3_modeling/modelo_llm.md).
 
 ---
 
@@ -316,23 +486,43 @@ modelo de linguagem na etapa seguinte, a regra está fixada no risco 8.4: identi
 explícita do que é gerado, citação obrigatória da matéria que sustenta a afirmação, e
 nenhuma geração de número — o modelo descreve o dado apurado, não o produz.
 
+*edited 16-11-2026 (TP4)* — o processamento de linguagem acrescenta dois compromissos, ambos
+cumpridos nesta entrega. O primeiro é de **soberania do dado**: o modelo roda na própria
+máquina, e nenhum trecho das matérias, nem nenhum texto que o usuário digite na interface, é
+enviado a serviço de terceiro. O que sai da máquina é o download dos pesos, uma vez. O
+segundo é de **identificação**: toda resposta das rotas de linguagem carrega o modelo que a
+produziu, o instante da análise, o campo `gerativo` e o aviso de que é resultado automático
+não revisado por pessoa, e a interface exibe os quatro. Vale aqui a mesma distinção que a
+seção 9 já fazia para a raspagem: o corpus é insumo de análise, não conteúdo republicado — e
+o rótulo atribuído a uma matéria é leitura do projeto sobre o texto, nunca afirmação
+atribuída ao veículo que a publicou.
+
+O resumo gerado leva essa última ressalva mais longe, e é obrigação ética dizê-lo: **um
+resumo automático de matéria alheia, exibido sem marca, seria atribuir ao veículo frases que
+ele não escreveu** — e, como a verificação mostrou, às vezes fatos que ele não publicou. Por
+isso o resumo nunca aparece sozinho na interface: vem rotulado como gerado, com o modelo e o
+instante, e, quando a matéria vem do corpus, ao lado do resumo que a própria redação
+publicou. O leitor vê as duas versões e sabe qual é de quem.
+
 ---
 
 ## 10. Arquitetura da solução
 
 *Adicionado em setembro — TP2.* *edited 16-11-2026: entraram as camadas de núcleo e de
-serviço HTTP; a interface passou a sete páginas.*
+serviço HTTP; a interface passou a sete páginas.* *edited 16-11-2026 (TP4): entrou a camada
+de modelo e a oitava página.*
 
 | Camada | Componente | Responsabilidade |
 | --- | --- | --- |
 | Coleta | `coleta.py` | APIs do IBGE: indicadores da ODS 4 e malha territorial |
 | Coleta | `scraping.py` | Beautiful Soup sobre 4 fontes de conteúdo em educação |
-| Texto | `texto.py` | Stopwords, tokenização, menções de UF e classificação temática |
+| Texto | `texto.py` | Stopwords, tokenização, menções de UF, temas e conferência de resumo |
 | Dados | `data/raw`, `data/processed` | Camada bruta e camada tratada, ambas versionadas |
 | Núcleo | `nucleo.py` | Leitura dos arquivos e cálculo do índice, em pandas puro |
-| Serviço | `utils.py` | Cache do Streamlit, estado de sessão e reporte ESG |
-| Serviço | `api.py` | Serviço HTTP em FastAPI: 10 rotas sobre o mesmo núcleo |
-| Interface | `app.py` + `paginas/` | Sete páginas de navegação, filtros e downloads |
+| Modelo | `modelo_llm.py` | Carga e uso dos dois modelos de linguagem locais, sem framework web |
+| Serviço | `utils.py` | Cache do Streamlit, estado de sessão, chamada à API e reporte ESG |
+| Serviço | `api.py` | Serviço HTTP em FastAPI: 14 rotas sobre o mesmo núcleo |
+| Interface | `app.py` + `paginas/` | Oito páginas de navegação, filtros e downloads |
 
 A coleta roda fora da aplicação, por decisão de projeto: o painel não depende de rede,
 sobe em segundos e pode ser publicado sem credenciais.
@@ -343,7 +533,17 @@ segundo consumidor dos mesmos dados. É a peça que garante a meta 4.11 e mitiga
 ```
 data/  →  nucleo.py  →  utils.py  →  app.py + paginas/     (painel Streamlit)
                     ↘  api.py                              (serviço HTTP FastAPI)
+                       ↑
+            modelo_llm.py                                  (modelos de linguagem locais)
 ```
+
+*edited 16-11-2026 (TP4)* — `modelo_llm.py` segue a mesma regra de `nucleo.py`: não importa
+`fastapi` nem `streamlit`, porque os modelos são recurso do projeto e não do servidor web. A
+seta aponta só para `api.py` de propósito. Cada modelo é carregado **uma vez por execução do
+serviço**, e a página *Análise de linguagem* os consome por HTTP em vez de carregá-los: o
+Streamlit reexecuta o script inteiro a cada interação do usuário, e modelos de centenas de
+milhões de parâmetros não podem ser carregados nesse ritmo. Dentro do arquivo há um registro
+por tarefa, e cada uma carrega, falha e é relatada em separado.
 
 O painel e o serviço são processos independentes, e o painel não depende do serviço. A
 Referência da API, em [`../4_deployment/api_reference.md`](../4_deployment/api_reference.md),
@@ -353,7 +553,8 @@ documenta as rotas, os parâmetros e os limites de cada uma.
 
 ## 11. Marcos
 
-*Adicionado em setembro — TP2.* *edited 16-11-2026: acrescentados os marcos do TP3.*
+*Adicionado em setembro — TP2.* *edited 16-11-2026: acrescentados os marcos do TP3 e, em
+seguida, os do TP4.*
 
 | Marco | Estágio TDSP | Situação |
 | --- | --- | --- |
@@ -364,5 +565,13 @@ documenta as rotas, os parâmetros e os limites de cada uma.
 | Núcleo de dados sem dependência de interface | Modeling | Concluído |
 | Serviço HTTP em FastAPI e sua referência | Deployment | Concluído |
 | Especificação das tarefas de LLM | Modeling | Concluído |
-| Implementação das tarefas de LLM | Modeling | Previsto — próxima entrega |
+| Seleção dos modelos de linguagem, com candidatos medidos | Modeling | Concluído |
+| Integração dos modelos locais ao serviço FastAPI | Deployment | Concluído |
+| Contrato de resposta declarado em todas as rotas | Deployment | Concluído |
+| Tratamento de erro e degradação contida, verificados | Deployment | Concluído |
+| Interface de análise de linguagem | Deployment | Concluído |
+| Resumo automático do corpus, uma matéria por vez | Modeling | Concluído |
+| Conferência do texto gerado contra a fonte | Modeling | Concluído |
+| Camada semântica da conferência | Modeling | Previsto — pendência 9.2 |
+| Narrativa do reporte ESG a partir do ranking | Modeling | Previsto — exige modelo maior e verificação valor a valor |
 | Validação com usuário de Sustentabilidade | Customer Acceptance | Previsto |

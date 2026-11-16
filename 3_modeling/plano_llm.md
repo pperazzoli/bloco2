@@ -7,6 +7,17 @@ tarefas com modelos de linguagem, quais tarefas o problema de negócio deste pro
 pede, e o que precisa estar pronto para que a integração na próxima entrega seja ligar uma
 peça, não reescrever o projeto.
 
+> **Situação em 16-11-2026 (TP4).** Duas tarefas foram implementadas, as duas com modelos que
+> rodam na própria máquina: a **2.3, classificação de sentimento**, nas rotas
+> `POST /processar_texto` e `POST /noticias/sentimento`, e a **2.2, resumo automático**, em
+> `POST /processar_texto` com `tarefa: resumo`. As duas estão na página *Análise de
+> linguagem*. A tarefa **2.1, narrativa do reporte ESG**, continua fora, agora por um motivo
+> mais forte que o custo: o modelo de resumo inventou uma cifra na verificação, e um modelo
+> que inventa cifras ao resumir não pode redigir um relatório que cita cifras. A decisão, com
+> os quatro modelos medidos e os números de cada um, está em
+> [`modelo_llm.md`](modelo_llm.md). As pendências da seção 4 abaixo foram resolvidas ou
+> reclassificadas — ver a seção 5, acrescentada ao final.
+
 ---
 
 ## 1. Dados disponíveis e o que cada um habilita
@@ -165,3 +176,77 @@ publica, e a distinção entre dado apurado e texto gerado tem de ser visível a
 **4.5 Limite de custo por sessão.** Um painel interativo pode disparar chamadas a cada
 mudança de filtro. A geração precisa ficar atrás de ação explícita do usuário — um botão —
 nunca de recarregamento de página.
+
+---
+
+## 5. O que foi decidido na entrega seguinte
+
+*Adicionado em novembro — TP4. Fecha as cinco pendências da seção 4.*
+
+**5.1 Provedor e modelo — resolvido.** Não há provedor: os modelos rodam localmente. Quatro
+candidatos foram carregados e medidos sobre o corpus deste projeto, dois por tarefa.
+
+Para o sentimento, o adotado foi o `cardiffnlp/twitter-xlm-roberta-base-sentiment`. O
+critério decisivo não foi o custo, e sim a classe neutra: num corpus formado em boa parte por
+comunicação institucional, um modelo sem rótulo neutro funcional não serve. O candidato mais
+leve e mais rápido foi descartado por isso.
+
+Para o resumo, o adotado foi o `recogna-nlp/ptt5-base-summ-xlsum`, com 223 milhões de
+parâmetros contra os 582 do `mT5_multilingual_XLSum`. Aqui o custo decidiu, porque os dois
+alucinam igual — e a observação de que **alucinam igual** é o achado mais importante desta
+frente. Os números de cada um estão nas seções 2 e 3 de [`modelo_llm.md`](modelo_llm.md).
+
+**5.2 Guarda da credencial — não se aplica nesta etapa.** Sem provedor remoto, não há chave a
+guardar. `.streamlit/secrets.toml` continua no `.gitignore` e continua sendo o lugar previsto
+para quando entrar uma credencial. Os pesos do modelo também não entram no repositório: ficam
+no cache local do HuggingFace, e `GET /modelo` informa onde.
+
+**5.3 Tratamento de indisponibilidade — cumprido e verificado.** A regra era que a falha
+degradasse a funcionalidade de texto sem derrubar o painel. Foi verificada rodando o serviço
+com o cache de modelos vazio e sem acesso à internet: as 10 rotas de dados responderam
+normalmente, as 4 de linguagem responderam 503 com o motivo e o que fazer, e a validação de
+entrada manteve precedência sobre o 503. A página *Análise de linguagem* avisa na tela e as
+outras sete seguem lendo `data/` diretamente.
+
+**5.4 Marcação do conteúdo gerado — cumprido, e já posto à prova.** Toda resposta das rotas
+de linguagem carrega `modelo`, `analisado_em`, `gerativo` e um `aviso`, e a interface exibe
+os quatro. A regra, que seria precaução enquanto houvesse só o classificador, virou
+necessidade demonstrada: o modelo de resumo produziu, na verificação, uma data, um estado e
+uma cifra ausentes do texto de entrada. O campo `gerativo` existe exatamente para separar as
+duas coisas, e atravessa o registro de modelos, a resposta da API e a tela.
+
+Marcar, porém, não bastou, e isso é o que esta entrega aprendeu. Marcação é aviso, e aviso
+depende de quem lê. Entrou então uma contenção que não estava prevista em nenhuma das regras
+da seção 4: **a conferência automática do resumo contra o texto de origem**, que procura no
+texto gerado os números, datas e nomes próprios e diz quais deles não estão no original. Ela
+não usa modelo, vem em toda resposta de resumo e não pode ser desligada.
+
+**5.5 Limite de custo por sessão — cumprido.** Tanto a carga de cada modelo quanto cada
+análise ficam atrás de um botão. Nada dispara em recarregamento de tela: a página abre
+consultando `GET /modelo`, que relata a situação dos dois **sem** carregá-los. A mesma regra
+decidiu a forma da tarefa 2.2: o resumo é oferecido uma matéria por vez, porque resumir o
+corpus inteiro custaria perto de sete minutos de CPU.
+
+**5.6 A avaliação prevista na tarefa 2.2 — implementada em duas camadas.** Este documento
+previa comparar o resumo gerado com a coluna `resumo`, que nas fontes de sindicação é o
+resumo escrito pela própria redação. Foi feito, e na interface: quando a matéria vem do
+corpus, os dois aparecem lado a lado, para julgamento humano.
+
+Acima dessa, entrou uma camada automática que o documento não previa: a conferência de cada
+número, data e nome próprio do resumo contra o **texto da própria matéria** — não contra o
+resumo da redação. A diferença importa: a referência da redação serve para julgar se o resumo
+é bom, a conferência serve para dizer se ele inventou, e é a segunda que impede o dano.
+
+Medir ROUGE contra a referência da redação seria um script curto e **não foi feito de
+propósito** — ROUGE mede sobreposição de palavras e não detecta invenção, de modo que
+pontuaria bem um resumo que repete o vocabulário do original e inventa um número. A métrica
+útil que agora existe é outra: a taxa de termos sem respaldo que a conferência produz.
+
+**5.7 O que continua pendente.** A tarefa 2.1, narrativa do reporte, depende de modelo maior
+e de verificação valor a valor contra a tabela de origem. A 2.4, de perguntas e respostas,
+não foi tentada. A 2.5, de extração de entidades, segue como a de maior risco e menor
+retorno — e o que se aprendeu com o resumo reforça isso: o modelo inventa cifra quando lhe
+falta matéria, que é exatamente o modo de falha mais caro numa tarefa de extração. E a
+comparação com a linha de base da seção 3.4 — medir um classificador temático contra a regra
+determinística de `temas_ods4` — exigiria um terceiro modelo, de classificação *zero-shot*,
+com 1,1 GB e sete passagens por matéria; fica pendente com o custo já levantado.
