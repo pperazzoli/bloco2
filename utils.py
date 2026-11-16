@@ -1,25 +1,25 @@
 # utils.py - camada de dados da aplicacao
 # concentra leitura em cache, estado de sessao e os calculos derivados
 # criado 21-09-2026
+# edited 16-11-2026: a leitura dos arquivos e os calculos sairam daqui e foram para
+# nucleo.py, que nao depende de streamlit e por isso tambem serve a api do fastapi.
+# Este arquivo passou a ser so a camada de cache e de estado de sessao por cima do nucleo:
+# a assinatura de todas as funcoes publicas foi preservada, nenhuma pagina mudou.
 
 import io
-import json
 from datetime import date
-from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 from wordcloud import WordCloud
 
+import nucleo as nc
 import texto as tx
 
-RAIZ = Path(__file__).parent
-BRUTO = RAIZ / "data" / "raw"
-TRATADO = RAIZ / "data" / "processed"
-DOCS = {
-    "Project Charter": RAIZ / "1_business_understanding" / "project_charter.md",
-    "Data Summary Report": RAIZ / "2_data_acquisition" / "data_summary_report.md",
-}
+RAIZ = nc.RAIZ
+BRUTO = nc.BRUTO
+TRATADO = nc.TRATADO
+DOCS = nc.DOCS
 
 COLUNAS_INDICADORES = ["indicador_ods", "indicador", "uf", "regiao", "ano", "valor", "unidade", "fonte"]
 CORES_REGIAO = {
@@ -33,50 +33,37 @@ PALETAS_NUVEM = ["viridis", "plasma", "cividis", "magma", "Blues", "YlGnBu", "co
 
 @st.cache_data(ttl=3600, show_spinner="carregando indicadores")
 def carregar_indicadores():
-    dados = pd.read_csv(TRATADO / "ods4_uf.csv")
-    dados["origem"] = "IBGE"
-    return dados
+    return nc.ler_indicadores()
 
 
 @st.cache_data(ttl=3600)
 def carregar_fontes():
-    return pd.read_csv(TRATADO / "fontes.csv")
+    return nc.ler_fontes()
 
 
 @st.cache_data(ttl=3600, show_spinner="carregando noticias")
 def carregar_noticias():
-    noticias = pd.read_csv(BRUTO / "noticias_educacao.csv").fillna({"texto": "", "resumo": "", "editoria": ""})
-    noticias["data"] = pd.to_datetime(noticias["data"], errors="coerce")
-    noticias["mes"] = noticias["data"].dt.to_period("M").astype(str)
-    noticias["conteudo"] = noticias["titulo"] + " " + noticias["resumo"] + " " + noticias["texto"]
-    return noticias.sort_values("data", ascending=False).reset_index(drop=True)
+    return nc.ler_noticias()
 
 
 @st.cache_data(ttl=3600)
 def carregar_termos():
-    return pd.read_csv(TRATADO / "noticias_termos.csv")
+    return nc.ler_termos()
 
 
 @st.cache_data(ttl=3600)
 def carregar_tabela(nome):
-    caminho = TRATADO / nome
-    return pd.read_csv(caminho) if caminho.exists() else pd.DataFrame()
+    return nc.ler_tabela(nome)
 
 
 @st.cache_data(ttl=3600)
 def carregar_malha():
-    caminho = BRUTO / "malha_uf.geojson"
-    if not caminho.exists():
-        return None
-    return json.loads(caminho.read_text(encoding="utf-8"))
+    return nc.ler_malha()
 
 
 @st.cache_data(ttl=600)
 def carregar_documento(nome):
-    caminho = DOCS.get(nome)
-    if caminho is None or not caminho.exists():
-        return f"documento nao encontrado: {nome}"
-    return caminho.read_text(encoding="utf-8")
+    return nc.ler_documento(nome)
 
 
 # ---------------------------------------------------------------- estado de sessao
@@ -124,68 +111,28 @@ def dados_ativos():
 
 @st.cache_data(show_spinner=False)
 def indicadores_disponiveis(dados):
-    return sorted(dados["indicador"].unique())
+    return nc.indicadores_disponiveis(dados)
 
 
 @st.cache_data(show_spinner=False)
 def matriz_uf_indicador(dados):
-    # indexada so por uf: se o upload trouxer outra regiao, a uf nao se parte em duas
-    return dados.pivot_table(index="uf", columns="indicador", values="valor", aggfunc="mean")
+    return nc.matriz_uf_indicador(dados)
 
 
 @st.cache_data(show_spinner=False)
 def regiao_por_uf(dados):
-    # a regiao vinda do ibge tem precedencia sobre a que veio no upload
-    ordenado = dados.assign(ordem=(dados["origem"] != "IBGE").astype(int))
-    return ordenado.sort_values("ordem").drop_duplicates("uf").set_index("uf")["regiao"]
+    return nc.regiao_por_uf(dados)
 
 
 @st.cache_data(show_spinner="recalculando o indice")
 def calcular_indice(dados, pesos, metodo):
     # pesos chega como tupla de pares para poder entrar no cache
-    matriz = matriz_uf_indicador(dados)
-    pesos = dict(pesos)
-    carencia = pd.DataFrame(index=matriz.index)
-
-    for coluna in matriz.columns:
-        serie = matriz[coluna]
-        if metodo == "distancia de 100%":
-            normalizada = (100 - serie) / 100
-        else:
-            amplitude = serie.max() - serie.min()
-            normalizada = (serie.max() - serie) / amplitude if amplitude else serie * 0
-        carencia[coluna] = normalizada.clip(0, 1)
-
-    ativos = {c: pesos.get(c, 1.0) for c in matriz.columns if pesos.get(c, 1.0) > 0}
-    if not ativos:
-        return pd.DataFrame()
-
-    # media ponderada ignorando buracos: uma uf sem certo indicador nao zera o indice
-    colunas = list(ativos)
-    peso = pd.Series(ativos)
-    numerador = (carencia[colunas].fillna(0) * peso).sum(axis=1)
-    denominador = (carencia[colunas].notna() * peso).sum(axis=1)
-    indice = (numerador / denominador.replace(0, pd.NA) * 100).astype(float)
-
-    resultado = matriz.copy()
-    resultado["indice_prioridade"] = indice.round(1)
-    resultado = resultado.dropna(subset=["indice_prioridade"]).reset_index()
-    resultado.insert(1, "regiao", resultado["uf"].map(regiao_por_uf(dados)))
-    resultado = resultado.sort_values("indice_prioridade", ascending=False)
-    resultado.insert(0, "posicao", range(1, len(resultado) + 1))
-    return resultado.reset_index(drop=True)
+    return nc.calcular_indice(dados, dict(pesos), metodo)
 
 
 @st.cache_data(show_spinner=False)
 def estatisticas_noticias(noticias):
-    return {
-        "noticias": len(noticias),
-        "fontes": noticias["fonte"].nunique(),
-        "palavras": int(noticias["n_palavras"].sum()),
-        "media_palavras": int(noticias["n_palavras"].mean()) if len(noticias) else 0,
-        "primeira": noticias["data"].min(),
-        "ultima": noticias["data"].max(),
-    }
+    return nc.estatisticas_noticias(noticias)
 
 
 @st.cache_data(show_spinner=False)
@@ -195,13 +142,7 @@ def frequencias(conteudos, limite, extras, manter_dominio):
 
 @st.cache_data(show_spinner=False)
 def contagem_por_coluna(noticias, coluna, nomes):
-    contagem = {}
-    for celula in noticias[coluna].fillna(""):
-        for item in str(celula).split(";"):
-            if item:
-                contagem[item] = contagem.get(item, 0) + 1
-    tabela = pd.DataFrame(sorted(contagem.items(), key=lambda p: -p[1]), columns=nomes)
-    return tabela
+    return nc.contagem_por_coluna(noticias, coluna, nomes)
 
 
 # ---------------------------------------------------------------- nuvem de palavras

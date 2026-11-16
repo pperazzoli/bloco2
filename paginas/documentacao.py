@@ -1,5 +1,8 @@
 # paginas/documentacao.py - leitura dos documentos tdsp dentro da aplicacao
 # criado 21-09-2026
+# edited 16-11-2026: a lista de documentos passou de dois para quatro com a entrada do plano
+# de uso de llm e da referencia da api; a lista vem de utils.DOCS, nada mudou aqui alem da
+# arvore de estrutura do repositorio
 
 import streamlit as st
 
@@ -42,19 +45,21 @@ st.code(
 tp1/
 ├── 1_business_understanding/    project_charter.md
 ├── 2_data_acquisition/          data_summary_report.md
-├── 3_modeling/
-├── 4_deployment/
+├── 3_modeling/                  plano_llm.md
+├── 4_deployment/                api_reference.md
 ├── 5_customer_acceptance/
 ├── data/
 │   ├── raw/                     noticias_educacao.csv, noticias_corpus.txt, malha_uf.geojson
 │   └── processed/               ods4_uf.csv, fontes.csv, noticias_*.csv,
 │                                 robots_verificacao.csv
-├── paginas/                     paginas da aplicacao streamlit
+├── paginas/                     as sete paginas da aplicacao streamlit
 ├── app.py                       roteador multipagina
+├── api.py                       servico HTTP com FastAPI (10 rotas)
+├── nucleo.py                    leitura dos arquivos e calculo, sem streamlit
 ├── coleta.py                    coleta via API do IBGE
 ├── scraping.py                  extracao web com Beautiful Soup (checa robots.txt)
 ├── texto.py                     utilidades de texto
-└── utils.py                     cache, estado de sessao e calculos
+└── utils.py                     cache do streamlit e estado de sessao
 """,
     language=None,
 )

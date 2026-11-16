@@ -1,6 +1,8 @@
 # app.py - ponto de entrada da aplicacao
 # edited 21-09-2026: o conteudo estatico do tp1 virou paginas/visao_geral.py e este
 # arquivo passou a ser o roteador multipagina, com a barra lateral comum a todas
+# edited 16-11-2026: entrou a setima pagina, paginas/servico_api.py, cliente da api do
+# fastapi; as paginas de dados viraram o grupo "Dados e serviço"
 
 import streamlit as st
 
@@ -26,8 +28,9 @@ navegacao = st.navigation(
             st.Page("paginas/prioridade.py", title="Índice de prioridade", icon="🎯"),
             st.Page("paginas/noticias.py", title="Notícias e nuvem de palavras", icon="📰"),
         ],
-        "Dados": [
+        "Dados e serviço": [
             st.Page("paginas/arquivos.py", title="Upload e download", icon="📁"),
+            st.Page("paginas/servico_api.py", title="Serviço de API", icon="🔌"),
         ],
     }
 )

@@ -1,4 +1,5 @@
 # edited 21-09-2026: acrescentadas as bibliotecas de scraping e nuvem de palavras
+# edited 16-11-2026: acrescentadas as bibliotecas do servico de api (fastapi + uvicorn)
 streamlit>=1.40
 pandas>=2.2
 plotly>=5.24
@@ -7,3 +8,5 @@ beautifulsoup4>=4.12
 lxml>=5.2
 wordcloud>=1.9
 matplotlib>=3.8
+fastapi>=0.115
+uvicorn>=0.32
