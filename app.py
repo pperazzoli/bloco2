@@ -5,6 +5,8 @@
 # fastapi; as paginas de dados viraram o grupo "Dados e serviço"
 # edited 16-11-2026 (TP4): entrou a oitava pagina, paginas/linguagem.py, que consome as
 # rotas de linguagem natural da api e com elas o modelo local de modelo_llm.py
+# edited 25-11-2026 (TP5): entrou a nona pagina, paginas/assistente.py, a conversa com
+# memoria sobre os dados do projeto, cliente de POST /assistente
 
 import streamlit as st
 
@@ -30,6 +32,7 @@ navegacao = st.navigation(
             st.Page("paginas/prioridade.py", title="Índice de prioridade", icon="🎯"),
             st.Page("paginas/noticias.py", title="Notícias e nuvem de palavras", icon="📰"),
             st.Page("paginas/linguagem.py", title="Análise de linguagem", icon="🤖"),
+            st.Page("paginas/assistente.py", title="Assistente ESG", icon="💬"),
         ],
         "Dados e serviço": [
             st.Page("paginas/arquivos.py", title="Upload e download", icon="📁"),

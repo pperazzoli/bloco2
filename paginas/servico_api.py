@@ -3,6 +3,7 @@
 # edited 16-11-2026 (TP4): entraram as quatro rotas de linguagem natural na tabela e a
 # funcao de chamada foi para utils.chamar_api, para que a pagina de analise de linguagem use
 # a mesma. O nome local fica como atalho, as chamadas desta pagina nao mudaram.
+# edited 25-11-2026 (TP5): entrou POST /assistente na tabela, que passou a quinze rotas
 
 # Esta pagina e um cliente HTTP da api.py: nao le os arquivos de data/ diretamente, chama o
 # servico. E o que fecha a integracao pedida no TP3 e o que permite testar as rotas sem sair
@@ -48,10 +49,11 @@ ROTAS = [
     ["POST", "/indicadores", "Envia novas observações para a base volátil do serviço"],
     ["GET", "/indicadores/enviados", "Lista o que foi enviado nesta execução do serviço"],
     ["DELETE", "/indicadores/enviados", "Descarta o que foi enviado nesta execução"],
-    ["GET", "/modelo", "Ficha do modelo de linguagem local e situação da carga"],
-    ["POST", "/modelo/carregar", "Carrega o modelo na memória, ou tenta de novo após falha"],
+    ["GET", "/modelo", "Ficha dos três modelos de linguagem locais e situação de cada carga"],
+    ["POST", "/modelo/carregar", "Carrega um modelo na memória, ou tenta de novo após falha"],
     ["POST", "/processar_texto", "Analisa um texto com o modelo de linguagem local"],
     ["POST", "/noticias/sentimento", "Aplica o modelo ao corpus de notícias coletado"],
+    ["POST", "/assistente", "Conversa com memória sobre os indicadores, o índice e as notícias"],
 ]
 
 
@@ -95,7 +97,7 @@ rotas, explorador, envio = st.tabs(["Rotas disponíveis", "Explorador de consult
 # ------------------------------------------------------------------ aba 1: documentacao
 
 with rotas:
-    st.subheader("As quatorze rotas do serviço")
+    st.subheader("As quinze rotas do serviço")
     st.dataframe(
         pd.DataFrame(ROTAS, columns=["Método", "Rota", "Função"]),
         hide_index=True,
@@ -122,13 +124,13 @@ with rotas:
         "data/  →  nucleo.py  →  utils.py  →  app.py + paginas/     (painel Streamlit)\n"
         "                    ↘  api.py                              (serviço HTTP FastAPI)\n"
         "                       ↑\n"
-        "            modelo_llm.py                                  (modelo de linguagem local)",
+        "            modelo_llm.py + assistente.py                  (modelos de linguagem locais)",
         language=None,
     )
     st.caption(
-        "As quatro rotas de linguagem natural são exercitadas na página *Análise de "
-        "linguagem*. São as únicas que dependem do modelo: se ele não carregar, respondem 503 "
-        "e as dez restantes continuam atendendo."
+        "As cinco rotas de linguagem natural são exercitadas nas páginas *Análise de "
+        "linguagem* e *Assistente ESG*. São as únicas que dependem de modelo: se ele não "
+        "carregar, respondem 503 e as dez restantes continuam atendendo."
     )
 
 # ------------------------------------------------------------------ aba 2: consultas get

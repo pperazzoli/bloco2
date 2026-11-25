@@ -6,6 +6,9 @@ revisão está indicado no início de cada seção.
 **edited 16-11-2026:** problema de negócio reavaliado à luz das novas ferramentas (FastAPI e
 Selenium), escopo estendido ao serviço HTTP e à preparação para LLM, riscos e arquitetura
 revisados. O que entrou nesta revisão está marcado *edited 16-11-2026*.
+**edited 25-11-2026 (TP5):** terceira reavaliação, com a solução final — o assistente com
+memória sobre os dados do projeto (seção 1.3); objetivos, metas, riscos, ética, arquitetura e
+marcos atualizados. O que entrou nesta revisão está marcado *edited 25-11-2026 (TP5)*.
 
 ---
 
@@ -107,6 +110,62 @@ ou um modelo muito maior, com GPU ou provedor remoto, ou uma arquitetura em que 
 texto gerado seja verificado contra a tabela de origem antes de ser exibido. A segunda é a
 que respeita o risco 8.4, e é trabalho de outra entrega.
 
+### 1.3 Terceira reavaliação: a solução final, um assistente com memória sobre os dados
+
+*Adicionado em novembro — TP5.*
+
+O problema de negócio é o mesmo desde o TP1, e esta seção registra como a solução final o
+resolve — e por que dados, IA e engenharia de prompt aparecem nessa ordem de importância.
+
+**1.3.1 O que faltava ao painel.** As oito páginas respondem a quem sabe onde clicar. O
+usuário primário (seção 6.1) usa planilha e BI, não programa, e a sua pergunta real é
+encadeada: "quais territórios priorizar?", "por que esse?", "e comparado com aquele?", "o que
+a imprensa diz?". No painel, cada uma dessas perguntas é uma página, um filtro e uma leitura
+de tabela; o diagnóstico territorial comparado, que a meta 4.5 quer em menos de cinco
+minutos, depende de o usuário saber montar o caminho. O assistente aceita a pergunta como o
+analista a faria a um colega, **lembra o que já foi conversado** e responde com o número, a
+fonte e a conferência. É a mesma base de dados, por um canal que dispensa saber o caminho.
+
+**1.3.2 O dado é o centro, o modelo é a interface.** A primeira medição desta etapa foi
+perguntar ao modelo, sem dado nenhum, o que mede a taxa de alfabetização: ele respondeu, com
+segurança, que ela "é medida pelo IDH e pelo IDE" — o que é falso. Com o ranking do projeto
+no prompt, devolveu as cinco UFs prioritárias com os cinco índices exatos. O valor da
+solução não vem do modelo: vem das 189 observações coletadas da API do IBGE, das 105
+matérias raspadas e do índice que `nucleo.py` calcula sobre elas. O modelo **lê** esses
+números e redige sobre eles; não sabe, não calcula e não estima nada. É a regra 1 do risco
+8.4, fixada no TP3 antes de haver modelo, levada ao pé da letra: até a média, a diferença e a
+posição de cada UF chegam prontas no prompt. A verificação da seção 6 de
+[`../3_modeling/assistente_llm.md`](../3_modeling/assistente_llm.md) mede o que acontece sem
+os dados.
+
+**1.3.3 A engenharia de prompt é a governança aplicada ao texto gerado.** Cada regra do
+prompt traduz uma regra deste documento: não produzir número (risco 8.4), não fazer previsão
+nem recomendação de investimento financeiro (escopo 2.2), não ler o índice como mérito
+(seção 9), não ler notícia como medida do território (risco 8.6), citar a matéria que
+sustenta a resposta (tarefa 2.4 do plano de LLM). A forma do contexto foi ajustada falha a
+falha: seis respostas erradas observadas no desenvolvimento viraram seis mudanças, e três
+delas tinham todos os números certos e a relação errada — posição contada errado, contagem
+atribuída à UF errada, comparação invertida. Num reporte ESG, esse é o erro mais perigoso,
+porque passa por qualquer conferência de número. A seção 4.4 do documento do assistente
+registra os seis casos.
+
+**1.3.4 Um caminho, e por quê.** Das três opções do enunciado, foi escolhida a memória
+conversacional. A sumarização já tinha sido levada no TP4 até onde ela serve — uma matéria
+por vez, com conferência — e um agente que propusesse ações tiraria a decisão dos pesos
+explícitos, que o risco 8.3 existe para proteger. O assistente apoia a decisão sem tomá-la.
+Entre modelo local e API online, foi escolhido o local: o `llama3.1:8b`, servido pelo Ollama
+nesta máquina, já estava instalado, fala português e mantém o compromisso de soberania do
+dado da seção 9 — nenhuma pergunta sai do computador. O problema não pede um modelo maior,
+porque o modelo não precisa saber nada sobre educação: precisa ler bem uma tabela.
+
+**1.3.5 O que o usuário ganha, em escala honesta.** Uma conversa de três perguntas — as
+prioritárias, por que a primeira, como ela está num indicador — leva menos de um minuto e
+devolve os números com a fonte, em vez de três páginas e duas tabelas. O ganho é de
+**acesso**, não de dado novo: o assistente não sabe nada que o painel não mostre. E tem
+limite declarado: a conferência pega número inventado, não pega número verdadeiro posto no
+lugar errado (risco 8.15), e por isso cada resposta vem com o gráfico, as fontes e o bloco de
+dados que o modelo leu, à vista.
+
 ---
 
 ## 2. Escopo
@@ -127,6 +186,12 @@ rota de escrita para dado próprio do usuário; extração do núcleo de dados e
 módulo sem dependência de interface, de modo que painel e serviço devolvam o mesmo número; e
 a especificação documentada das tarefas de LLM a implementar na etapa seguinte.
 
+*edited 25-11-2026 (TP5)* — a solução final acrescentou ao escopo: o assistente
+conversacional com memória, que responde em linguagem natural sobre os indicadores, o índice
+e as notícias a partir dos dados já apurados, por modelo local; a conferência de cada
+resposta contra esses dados; a visão do ciclo completo, do dado ao insight, na página inicial
+do painel; e o relatório final do projeto, em `5_customer_acceptance/`.
+
 **2.2 Não inclui** — dados nominais de escolas individuais; dados pessoais de estudantes ou
 docentes; avaliação jurídica de entidades beneficiadas; recomendação de investimento
 financeiro. *edited 21-09-2026:* também está fora de escopo qualquer modelo preditivo — o
@@ -134,7 +199,10 @@ financeiro. *edited 21-09-2026:* também está fora de escopo qualquer modelo pr
 16-11-2026:* também está fora de escopo a persistência do dado enviado pelo usuário — nem o
 upload de CSV nem a rota de escrita da API gravam em disco, por decisão registrada no risco
 8.8; e está fora de escopo publicar o serviço HTTP em rede aberta, que exigiria autenticação,
-limite de requisições e CORS restrito, conforme a seção 4.1 da Referência da API.
+limite de requisições e CORS restrito, conforme a seção 4.1 da Referência da API. *edited
+25-11-2026 (TP5):* também está fora de escopo guardar as conversas com o assistente — a
+memória vive na sessão do usuário e o serviço não guarda estado —, e o assistente recusa,
+por regra do prompt, previsão de valor futuro e recomendação de investimento financeiro.
 
 **2.3 Restrição** — os indicadores 4.a.1 e 4.c.1 do IBGE só descem até o nível de UF. A
 descida ao nível municipal depende dos microdados do INEP.
@@ -144,7 +212,8 @@ descida ao nível municipal depende dos microdados do INEP.
 ## 3. Objetivos
 
 *Objetivos 3.5 e 3.6 adicionados em setembro — TP2. Objetivos 3.7 e 3.8 adicionados em
-novembro — TP3.*
+novembro — TP3. Objetivos 3.9 a 3.12 adicionados em novembro — TP4. Objetivos 3.13 e 3.14
+adicionados em novembro — TP5.*
 
 **3.1** Coletar via API os indicadores oficiais de monitoramento da ODS 4.
 
@@ -183,12 +252,21 @@ situação do território.
 datas e nomes próprios contra o texto que o originou, de modo que o que o modelo inventou
 apareça apontado e não dependa da atenção de quem lê.
 
+**3.13** Responder às perguntas do analista em linguagem natural, **lembrando a conversa**,
+a partir dos dados já apurados pelo projeto — indicadores, índice e notícias —, por modelo
+executado na própria máquina.
+
+**3.14** Garantir que todo número citado pelo assistente venha dos dados entregues a ele, e
+que cada resposta apareça com as suas fontes e com a conferência do que escreveu contra esses
+dados.
+
 ---
 
 ## 4. Metas e indicadores de sucesso
 
 *Metas 4.8 e 4.9 adicionadas em setembro — TP2. Metas 4.10 e 4.11 adicionadas em
-novembro — TP3. Metas 4.12 a 4.16 adicionadas em novembro — TP4.*
+novembro — TP3. Metas 4.12 a 4.16 adicionadas em novembro — TP4. Metas 4.17 a 4.19
+adicionadas em novembro — TP5.*
 
 **4.1 Cobertura territorial** — indicador: % de UFs com índice calculado. Alvo: 100%, as 27 UFs.
 
@@ -218,7 +296,8 @@ com os dados já em cache. Alvo: menos de 1 segundo.
 ativos do projeto (indicadores, índice, corpus, catálogo de fontes). Alvo: pelo menos 2
 rotas, com ao menos uma de consulta e uma de escrita. **Situação atual: 14 rotas, 8 de
 consulta, 2 de escrita e 4 de linguagem natural, todas com documentação interativa gerada
-pelo FastAPI.**
+pelo FastAPI.** *edited 25-11-2026 (TP5):* 15 rotas — a quinta de linguagem natural é
+`POST /assistente`.
 
 **4.11 Paridade entre canais** — indicador: diferença entre o índice devolvido pela rota
 `/ranking` e o índice exibido na página de prioridade, com os mesmos pesos e método. Alvo:
@@ -249,7 +328,27 @@ e a truncagem é dita em proporção — "o modelo viu 44% do texto".**
 **4.16 Respaldo do texto gerado** — indicador: % dos resumos entregues com a conferência dos
 seus números, datas e nomes próprios contra o texto de origem. Alvo: 100%, sem possibilidade
 de desligar. **Situação atual: 100% — a conferência é anexada dentro da função que gera o
-resumo, não pela rota, e aparece tanto na resposta da API quanto na tela.**
+resumo, não pela rota, e aparece tanto na resposta da API quanto na tela.** *edited
+25-11-2026 (TP5):* vale também para o assistente — toda resposta vem conferida contra os dados
+que o modelo recebeu, sem opção de desligar.
+
+**4.17 Ancoramento das respostas do assistente** — indicador: termos da resposta — números,
+datas e nomes próprios — sem respaldo nos dados que o modelo recebeu, na bateria de
+verificação. Alvo: zero. **Situação atual: zero em 55 termos conferidos nas dez perguntas,
+com o assistente como está em produção.** Sem o bloco de dados, o mesmo modelo inventou
+regiões, cifras, matérias e empresas — seção 6 de
+[`../3_modeling/assistente_llm.md`](../3_modeling/assistente_llm.md).
+
+**4.18 Continuidade da conversa** — indicador: perguntas que dependem da anterior — "a
+primeira delas", "comparado com ela", "qual das duas" — respondidas corretamente. Alvo: todas.
+**Situação atual: 5 de 5 com memória, 0 de 5 sem ela.** Sem memória o erro não aparece na
+conferência: a resposta trata de outra coisa com dados verdadeiros — "ela" virou o Pará, "das
+duas" virou Paraíba e Alagoas.
+
+**4.19 Tempo de resposta do assistente** — indicador: segundos por resposta, com o modelo
+carregado, na máquina do projeto. Alvo: menos de 30 segundos. **Situação atual: média de 10,4
+s e máximo de 24,1 s na verificação, com 68% do modelo na GPU.** A primeira pergunta depois de
+o modelo sair da memória soma a carga pelo Ollama, que levou 45 s na primeira medição.
 
 ---
 
@@ -317,7 +416,8 @@ carência, beneficiários indiretos do redirecionamento do recurso.
 ## 8. Riscos
 
 *Riscos 8.5 a 8.8 adicionados em setembro — TP2. Riscos 8.9 a 8.11 adicionados em
-novembro — TP3.*
+novembro — TP3. Riscos 8.12 a 8.14 adicionados em novembro — TP4. Riscos 8.15 a 8.17
+adicionados em novembro — TP5.*
 
 **8.1 Indisponibilidade ou mudança das APIs públicas** — mitigação: coletar e armazenar os
 dados em ambiente local. *edited 21-09-2026:* a aplicação lê exclusivamente os arquivos de
@@ -373,6 +473,19 @@ invertida entre duas entidades que estejam ambas no texto. Essa camada semântic
 pendência 9.2 do documento do modelo, e é o que ainda separa o resumo de hoje — ferramenta
 de triagem — de um texto que pudesse entrar num reporte.
 
+*edited 25-11-2026 (TP5):* o assistente é a terceira tarefa gerativa, e a primeira que
+responde sobre os números do índice — exatamente o terreno do risco. As quatro regras valem
+para ele, todas cumpridas por construção: **o modelo não calcula** — ranking, valores,
+médias, diferenças, posições e comparações chegam prontos de `nucleo.py`, e o prompt proíbe
+calcular, estimar ou projetar; **a matéria é citada** — pelo número entre colchetes, e a
+lista das matérias e dos indicadores do contexto acompanha toda resposta, cite o modelo ou
+não; **o gerado é identificado** — modelo, instante, aviso e campo `gerativo` em toda
+resposta; **a geração fica atrás de ação explícita** — cada resposta é uma pergunta enviada.
+A quinta contenção, a conferência automática, também vale: toda resposta é conferida contra
+o bloco de dados que o modelo recebeu. A medição em quatro condições está na seção 6 de
+[`../3_modeling/assistente_llm.md`](../3_modeling/assistente_llm.md); o erro que a
+conferência não pega ficou registrado como risco próprio, o 8.15.
+
 **8.5 Quebra do seletor de raspagem** — os sites de origem podem mudar de HTML.
 Mitigação: `scraping.py` isola cada fonte em sua própria função, registra aviso e segue com
 as demais; os dados já coletados permanecem em `data/raw/`.
@@ -425,7 +538,10 @@ foi cumprida e verificada. São agora duas as páginas dependentes do serviço �
 API* e *Análise de linguagem* —, ambas com o mesmo aviso de tela, e as outras seis continuam
 sem tocar a rede. Do lado do serviço, a verificação foi feita rodando-o com o cache de
 modelos vazio e sem acesso à internet: as 10 rotas de dados responderam normalmente e as 4
-de linguagem responderam 503 com o motivo.
+de linguagem responderam 503 com o motivo. *edited 25-11-2026 (TP5):* o assistente não
+reabre o risco: o Ollama é programa local, e a conversa não toca a internet. A página
+*Assistente ESG* é a terceira dependente do serviço, com o mesmo aviso de tela, e as outras
+seis continuam lendo `data/`.
 
 **8.12 Modelo de linguagem indisponível no ambiente de quem executa** — os pesos somam cerca
 de 2 GB nos dois modelos e não entram no repositório; a primeira carga depende de rede, e a
@@ -458,6 +574,34 @@ ela aponta o dedo no termo. Numa execução de verificação pela interface, com
 "Estado de Goiás" e "mil", e os quatro termos saíram marcados como ausentes do original. O
 que ela ainda não pega é relação invertida entre entidades presentes no texto: pendência 9.2
 em [`../3_modeling/modelo_llm.md`](../3_modeling/modelo_llm.md).
+
+**8.15 Assistente pôr um número verdadeiro no lugar errado** — o risco de maior
+consequência do TP5, porque passa por toda conferência de número. No desenvolvimento, o
+modelo disse que o Acre era o 3º pior em internet, sendo o 2º; atribuiu a Pernambuco a
+contagem de indicadores da Bahia; e concluiu que a Bahia tinha a pior alfabetização com
+90,5% contra 89,9% de Pernambuco. Os números estavam todos nos dados; a relação estava
+errada. Mitigação implementada: **o que exigiria contar, comparar ou ordenar chega pronto no
+contexto** — posição em cada indicador, "pior situação" e "melhor situação" por extenso,
+comparação direta entre as UFs em foco, nome da UF repetido em cada frase do seu bloco —, e
+os três casos passaram a ser respondidos certo. O risco residual fica declarado: em pergunta
+que o contexto não antecipa, o erro de relação continua possível. Por isso cada resposta
+aparece com o gráfico dos dados por trás dela e com o bloco que o modelo leu, para
+conferência humana em segundos.
+
+**8.16 Memória carregar o foco errado** — a memória de foco decide que dados entram no
+prompt, e uma UF que entrou de passagem pode ocupar o lugar de outra. Mitigação: o que a
+pergunta cita vem sempre antes do que a memória guarda; o foco é limitado a três UFs; região,
+tema e indicador só entram pela pergunta do usuário, nunca pela resposta do modelo; e as
+quatro listas da memória ficam à vista na barra lateral, com o botão que as apaga. A memória
+não é resumo gerado por modelo, de propósito: um resumo carregaria uma invenção para todos os
+prompts seguintes.
+
+**8.17 Assistente indisponível no ambiente de quem executa** — depende do Ollama instalado,
+do modelo baixado (4,9 GB) e, para responder em segundos, de GPU. Mitigação: a falha é
+contida como a dos modelos do TP4 — a rota responde 503 com o motivo e a instrução
+(`ollama pull llama3.1:8b`), `GET /modelo` diz antes de qualquer pergunta se o modelo está no
+Ollama, e as rotas de dados e as outras páginas não dependem dele. Sem GPU o Ollama roda em
+CPU, mais devagar.
 
 ---
 
@@ -504,13 +648,25 @@ isso o resumo nunca aparece sozinho na interface: vem rotulado como gerado, com 
 instante, e, quando a matéria vem do corpus, ao lado do resumo que a própria redação
 publicou. O leitor vê as duas versões e sabe qual é de quem.
 
+*edited 25-11-2026 (TP5)* — o assistente mantém os dois compromissos e acrescenta um. A
+**soberania do dado** continua: o modelo roda no Ollama desta máquina, e nem a pergunta do
+usuário nem os dados do projeto são enviados a terceiro. A **identificação** continua: toda
+resposta traz o modelo, o instante, o aviso de que é texto gerado não revisado e a
+conferência do que escreveu. O compromisso novo é de **procedência que acompanha o texto**:
+quando o usuário baixa a conversa, cada resposta sai com a conferência e com as matérias que
+estavam no contexto, de modo que o texto gerado não circule separado da sua origem. Vale para
+a conversa a mesma ressalva do rótulo e do resumo: o que o assistente diz sobre uma matéria é
+leitura do projeto, citada pelo número e com o link para o original, nunca frase atribuída ao
+veículo.
+
 ---
 
 ## 10. Arquitetura da solução
 
 *Adicionado em setembro — TP2.* *edited 16-11-2026: entraram as camadas de núcleo e de
 serviço HTTP; a interface passou a sete páginas.* *edited 16-11-2026 (TP4): entrou a camada
-de modelo e a oitava página.*
+de modelo e a oitava página.* *edited 25-11-2026 (TP5): entraram o assistente, o Ollama e a
+nona página.*
 
 | Camada | Componente | Responsabilidade |
 | --- | --- | --- |
@@ -519,10 +675,12 @@ de modelo e a oitava página.*
 | Texto | `texto.py` | Stopwords, tokenização, menções de UF, temas e conferência de resumo |
 | Dados | `data/raw`, `data/processed` | Camada bruta e camada tratada, ambas versionadas |
 | Núcleo | `nucleo.py` | Leitura dos arquivos e cálculo do índice, em pandas puro |
-| Modelo | `modelo_llm.py` | Carga e uso dos dois modelos de linguagem locais, sem framework web |
+| Modelo | `modelo_llm.py` | Carga e uso dos três modelos de linguagem locais, sem framework web |
+| Modelo | Ollama, `llama3.1:8b` | Programa local que serve o modelo da conversa, na GPU quando há |
+| Assistente | `assistente.py` | Memória de foco, contexto de dados e prompt da conversa, sem framework web |
 | Serviço | `utils.py` | Cache do Streamlit, estado de sessão, chamada à API e reporte ESG |
-| Serviço | `api.py` | Serviço HTTP em FastAPI: 14 rotas sobre o mesmo núcleo |
-| Interface | `app.py` + `paginas/` | Oito páginas de navegação, filtros e downloads |
+| Serviço | `api.py` | Serviço HTTP em FastAPI: 15 rotas sobre o mesmo núcleo |
+| Interface | `app.py` + `paginas/` | Nove páginas de navegação, filtros, conversa e downloads |
 
 A coleta roda fora da aplicação, por decisão de projeto: o painel não depende de rede,
 sobe em segundos e pode ser publicado sem credenciais.
@@ -549,12 +707,29 @@ O painel e o serviço são processos independentes, e o painel não depende do s
 Referência da API, em [`../4_deployment/api_reference.md`](../4_deployment/api_reference.md),
 documenta as rotas, os parâmetros e os limites de cada uma.
 
+*edited 25-11-2026 (TP5)* — o assistente acrescenta uma peça ao lado do modelo, com a mesma
+regra de não importar framework web:
+
+```
+paginas/assistente.py  ──POST /assistente──►  api.py  →  assistente.py  →  nucleo.py
+     (memória na sessão)                                     │    (dados prontos)
+                                                             ▼
+                                              modelo_llm.py  →  Ollama (llama3.1:8b)
+                                                             │
+                                                             ▼
+                                              texto.py  (conferência contra os dados)
+```
+
+O serviço não guarda a conversa: a memória vem na requisição e volta atualizada na resposta.
+O ranking que o assistente cita é calculado pela mesma função `nucleo.calcular_indice`, com
+os pesos que a página envia — a meta 4.11 vale também para a conversa.
+
 ---
 
 ## 11. Marcos
 
 *Adicionado em setembro — TP2.* *edited 16-11-2026: acrescentados os marcos do TP3 e, em
-seguida, os do TP4.*
+seguida, os do TP4.* *edited 25-11-2026 (TP5): acrescentados os marcos da solução final.*
 
 | Marco | Estágio TDSP | Situação |
 | --- | --- | --- |
@@ -572,6 +747,11 @@ seguida, os do TP4.*
 | Interface de análise de linguagem | Deployment | Concluído |
 | Resumo automático do corpus, uma matéria por vez | Modeling | Concluído |
 | Conferência do texto gerado contra a fonte | Modeling | Concluído |
+| Assistente com memória sobre os dados, por modelo local | Modeling | Concluído |
+| Engenharia de prompt medida em quatro condições | Modeling | Concluído |
+| Rota `POST /assistente` e página *Assistente ESG* | Deployment | Concluído |
+| Ciclo do dado ao insight na página inicial | Deployment | Concluído |
+| Relatório final do projeto | Customer Acceptance | Concluído |
 | Camada semântica da conferência | Modeling | Previsto — pendência 9.2 |
-| Narrativa do reporte ESG a partir do ranking | Modeling | Previsto — exige modelo maior e verificação valor a valor |
-| Validação com usuário de Sustentabilidade | Customer Acceptance | Previsto |
+| Narrativa do reporte ESG a partir do ranking | Modeling | Parcial — o assistente redige com números conferidos; falta o fluxo de revisão humana antes da minuta |
+| Validação com usuário de Sustentabilidade | Customer Acceptance | Previsto — roteiro na seção 8 do relatório final |

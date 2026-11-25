@@ -1,6 +1,8 @@
 # paginas/visao_geral.py - apresentacao do projeto
 # edited 21-09-2026: texto herdado do app.py do tp1, acrescido dos indicadores de
 # cobertura no topo e do perfil rapido de uf no rodape
+# edited 25-11-2026 (TP5): entrou a secao "Do dado ao insight", que mostra o ciclo de ciencia
+# de dados do projeto em cinco passos, com os numeros de cada um e o atalho para a pagina
 
 import pandas as pd
 import plotly.express as px
@@ -38,6 +40,49 @@ rastreabilidade até a fonte oficial, o que expõe a empresa a risco de *social 
 indicadores oficiais da ODS 4 e gera o reporte ESG com a fonte de cada número registrada.
 """
 )
+
+st.divider()
+
+st.header("Do dado ao insight")
+st.caption(
+    "O ciclo de ciência de dados do projeto, na ordem do TDSP. Cada passo usa o resultado do "
+    "anterior, e os números abaixo são calculados agora, a partir dos arquivos de `data/`."
+)
+
+pesos = {n: float(st.session_state.pesos.get(n, 1.0)) for n in utils.indicadores_disponiveis(dados)}
+ranking = utils.calcular_indice(dados, tuple(sorted(pesos.items())), st.session_state.metodo_indice)
+topo = ranking.iloc[0] if not ranking.empty else None
+
+passos = st.columns(5)
+# rotulos curtos de proposito: em cinco colunas, rotulo longo e cortado na tela estreita
+with passos[0]:
+    st.markdown("**1 · Coleta**")
+    st.metric("Observações", len(dados))
+    st.caption(f"API do IBGE: {dados['indicador'].nunique()} indicadores da ODS 4 nas 27 UFs.")
+    st.page_link("paginas/indicadores.py", label="Indicadores", icon="📊")
+with passos[1]:
+    st.markdown("**2 · Contexto**")
+    st.metric("Matérias", estatisticas["noticias"])
+    st.caption(f"Raspagem de {estatisticas['fontes']} fontes, com o `robots.txt` conferido.")
+    st.page_link("paginas/noticias.py", label="Notícias", icon="📰")
+with passos[2]:
+    st.markdown("**3 · Modelagem**")
+    st.metric(
+        "Prioridade 1", topo["uf"] if topo is not None else "—",
+        f"índice {topo['indice_prioridade']:.1f}" if topo is not None else None, delta_color="off",
+    )
+    st.caption("Índice com pesos à vista, calculado por `nucleo.py`.")
+    st.page_link("paginas/prioridade.py", label="Índice", icon="🎯")
+with passos[3]:
+    st.markdown("**4 · IA local**")
+    st.metric("Modelos", 3)
+    st.caption("Sentimento, resumo e conversa, nesta máquina, com a saída conferida.")
+    st.page_link("paginas/linguagem.py", label="Linguagem", icon="🤖")
+with passos[4]:
+    st.markdown("**5 · Decisão**")
+    st.metric("Fontes", len(fontes))
+    st.caption("O assistente responde com os dados apurados; o reporte sai com a fonte de cada número.")
+    st.page_link("paginas/assistente.py", label="Assistente", icon="💬")
 
 st.divider()
 

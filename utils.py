@@ -8,6 +8,8 @@
 # edited 16-11-2026 (TP4): entrou chamar_api, que estava dentro de paginas/servico_api.py.
 # Com a segunda pagina cliente da api - a de analise de linguagem - as duas passaram a
 # precisar da mesma funcao, e duas copias divergiriam no tratamento de erro.
+# edited 25-11-2026 (TP5): o estado de sessao ganhou a conversa com o assistente, e entrou
+# conversa_em_markdown, que monta o registro da conversa para download.
 
 import io
 from datetime import date
@@ -79,6 +81,10 @@ PADROES = {
     "dados_extras": None,   # csv enviado pelo usuario e incorporado aos indicadores
     "stopwords_extras": [],
     "historico": [],
+    # edited 25-11-2026 (TP5): a conversa com o assistente e a memoria que a rota devolve.
+    # A memoria comeca em None e e sempre substituida inteira, nunca alterada no lugar.
+    "conversa": [],
+    "memoria_conversa": None,
 }
 
 
@@ -220,6 +226,42 @@ def detalhe_do_erro(resultado):
 
 def para_csv(tabela):
     return tabela.to_csv(index=False).encode("utf-8")
+
+
+def conversa_em_markdown(conversa):
+    # registro da conversa com o assistente: cada resposta sai com o modelo, o instante, a
+    # conferencia e as fontes, para que o texto gerado nao circule separado da procedencia
+    linhas = [
+        "# Conversa com o Assistente ESG — Bússola ESG Educação",
+        "",
+        f"**Exportada em:** {pd.Timestamp.now():%Y-%m-%d %H:%M}",
+        "",
+        "> Respostas geradas por modelo de linguagem local, não revisadas por pessoa. Os números",
+        "> vêm dos dados apurados pelo projeto; a conferência de cada resposta diz o que não está neles.",
+        "",
+    ]
+    for mensagem in conversa:
+        if mensagem["papel"] == "usuario":
+            linhas += [f"## Pergunta: {mensagem['conteudo']}", ""]
+            continue
+        detalhe = mensagem.get("detalhe", {})
+        conferencia = detalhe.get("conferencia", {})
+        linhas += [mensagem["conteudo"], ""]
+        linhas.append(
+            f"*Gerado por `{detalhe.get('modelo', '?')}` em {detalhe.get('analisado_em', '?')} · "
+            f"conferência: {conferencia.get('situacao', '?')}, {conferencia.get('ausentes', 0)} de "
+            f"{conferencia.get('conferidos', 0)} termos sem respaldo nos dados.*"
+        )
+        ausentes = [i["termo"] for i in conferencia.get("itens", []) if not i["no_original"]]
+        if ausentes:
+            linhas.append(f"*Termos a conferir: {', '.join(ausentes)}.*")
+        noticias = detalhe.get("fontes", {}).get("noticias", [])
+        if noticias:
+            linhas += ["", "Matérias no contexto desta resposta:"]
+            linhas += [f"- [{n['n']}] {n['titulo']} — {n['fonte']}, {n['data']} · {n['url']}" for n in noticias]
+        linhas.append("")
+    linhas += ["---", "", "Indicadores: IBGE — API de Agregados (SIDRA), ODS 4, anos de 2024 e 2025.", ""]
+    return "\n".join(linhas)
 
 
 def gerar_reporte(ranking, cesta, pesos, metodo, noticias_por_uf, fontes):

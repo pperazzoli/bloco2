@@ -17,6 +17,14 @@ peça, não reescrever o projeto.
 > os quatro modelos medidos e os números de cada um, está em
 > [`modelo_llm.md`](modelo_llm.md). As pendências da seção 4 abaixo foram resolvidas ou
 > reclassificadas — ver a seção 5, acrescentada ao final.
+>
+> **Situação em 25-11-2026 (TP5).** A tarefa **2.4, perguntas e respostas**, foi
+> implementada como a solução final do projeto: um assistente com **memória da conversa**,
+> que responde sobre os indicadores, o índice e as notícias com os dados já apurados, em
+> `POST /assistente` e na página *Assistente ESG*. O modelo é o `llama3.1:8b`, servido pelo
+> Ollama nesta máquina. Os dois requisitos que esta seção fixou para a tarefa foram cumpridos.
+> A decisão e a verificação estão em [`assistente_llm.md`](assistente_llm.md); o que mudou
+> neste plano está na seção 6, ao final.
 
 ---
 
@@ -250,3 +258,43 @@ falta matéria, que é exatamente o modo de falha mais caro numa tarefa de extra
 comparação com a linha de base da seção 3.4 — medir um classificador temático contra a regra
 determinística de `temas_ods4` — exigiria um terceiro modelo, de classificação *zero-shot*,
 com 1,1 GB e sete passagens por matéria; fica pendente com o custo já levantado.
+
+---
+
+## 6. O que foi decidido na solução final
+
+*Adicionado em novembro — TP5.*
+
+**6.1 A tarefa 2.4 entrou, com memória.** Perguntas e respostas sobre o material coletado
+viraram um assistente conversacional: além de responder, ele lembra a conversa, de modo que
+"e o Pará?" ou "qual das duas está pior?" sejam entendidas pela pergunta anterior. A tarefa
+foi especificada aqui para o corpus; na implementação cobre também os indicadores e o índice,
+porque é isso que o usuário primário pergunta primeiro.
+
+**6.2 Os dois requisitos da seção 2.4 foram cumpridos.** A **observação de dimensionamento**
+se confirmou: não há banco vetorial; a seleção das matérias é por filtro — UF, tema e
+palavras da pergunta —, e o critério é a própria memória da conversa, que a tela mostra. O
+**requisito não negociável**, citação da matéria, é cumprido de duas formas: o modelo cita
+pelo número entre colchetes, e a lista das matérias que estavam no contexto, com título,
+fonte e URL, acompanha toda resposta — cite o modelo ou não. A garantia não depende do
+modelo.
+
+**6.3 Provedor e modelo — a pendência 4.1, agora para texto livre.** O TP4 resolveu o
+provedor para classificação e resumo com modelos pequenos pelo `transformers`. Para conversar
+sobre tabela era preciso um modelo de instrução maior, e o escolhido foi o `llama3.1:8b`,
+servido pelo Ollama local: já instalado nesta máquina, com suporte oficial a português, 68%
+na GPU, de 2 a 25 segundos por resposta. A guarda de credencial (4.2) continua sem objeto —
+não há chave —, e a marcação do conteúdo gerado (4.4) e a geração atrás de ação explícita
+(4.5) valem para o assistente como para os modelos do TP4.
+
+**6.4 O que se aprendeu, e que este plano não previa.** O plano tratava o prompt como o lugar
+das regras. A implementação mostrou que **a forma do dado no prompt pesa mais que as regras**:
+das seis falhas observadas no desenvolvimento, quatro foram corrigidas mudando o bloco de
+dados — posição pronta, comparação pronta, "pior situação" por extenso, menos UFs em foco —, e
+três delas tinham todos os números certos e a relação errada. A seção 4.4 de
+[`assistente_llm.md`](assistente_llm.md) registra os seis casos.
+
+**6.5 O que continua pendente.** A tarefa **2.1**, narrativa do reporte, ficou parcialmente
+coberta: o assistente redige, sob pedido, um parágrafo sobre as UFs escolhidas, com cada
+número conferido contra os dados; falta levá-lo à minuta com revisão humana registrada. A
+**2.5**, extração de entidades, segue como a de maior risco e menor retorno.

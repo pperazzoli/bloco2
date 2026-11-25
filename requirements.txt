@@ -5,6 +5,9 @@
 # dependencia de GPU em nenhum ponto do projeto. sentencepiece nao e usado diretamente pelo
 # codigo: o tokenizador do modelo escolhido e SentencePiece e o transformers precisa dele
 # para converter o vocabulario, sem ele a carga falha.
+# edited 25-11-2026 (TP5): nenhuma biblioteca nova. O assistente usa o llama3.1:8b servido
+# pelo Ollama (https://ollama.com), programa instalado a parte, e fala com ele por HTTP com o
+# requests que ja estava aqui. Depois de instalar o Ollama: "ollama pull llama3.1:8b".
 streamlit>=1.40
 pandas>=2.2
 plotly>=5.24

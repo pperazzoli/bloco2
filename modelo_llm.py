@@ -13,11 +13,20 @@
 # Nada aqui chama servico externo. Os pesos sao baixados uma vez do HuggingFace Hub para o
 # cache local do usuario e dali em diante a carga e offline. A escolha de cada modelo e os
 # criterios que levaram a ela estao em 3_modeling/modelo_llm.md.
+#
+# edited 25-11-2026 (TP5): entrou a terceira tarefa, 'conversa', usada pelo assistente com
+# memoria de assistente.py. O modelo e o llama3.1:8b, servido pelo Ollama - programa que
+# roda nesta mesma maquina e responde por HTTP em 127.0.0.1:11434. Continua valendo a regra
+# do arquivo: nada sai da maquina. A diferenca e quem segura os pesos: nas duas tarefas do
+# TP4 e este processo, pelo transformers; na conversa e o processo do Ollama, que carrega o
+# modelo na GPU quando ha uma. A escolha esta em 3_modeling/assistente_llm.md.
 
 import os
 import time
 from datetime import datetime
 from pathlib import Path
+
+import requests
 
 import texto as tx
 
@@ -43,9 +52,32 @@ MODELOS = {
         "gerativo": True,
         "rotulos": [],
     },
+    # edited 25-11-2026 (TP5): 'servidor' marca o modelo que nao e carregado por este
+    # processo. limite_tokens aqui e a janela pedida ao Ollama (num_ctx), nao o maximo do
+    # modelo, que e 131 mil: 8192 cabe o contexto de dados, a janela de memoria e a resposta.
+    "conversa": {
+        "modelo": "llama3.1:8b",
+        "tarefa_hf": "não se aplica — servido pelo Ollama",
+        "descricao": "conversa com memória",
+        "limite_tokens": 8192,
+        "gerativo": True,
+        "rotulos": [],
+        "servidor": "ollama",
+    },
 }
 
 TAREFAS = list(MODELOS)
+
+# edited 25-11-2026 (TP5): endereco do Ollama nesta maquina. A variavel de ambiente existe
+# para quem roda o Ollama em outra porta; o padrao e o do proprio Ollama.
+OLLAMA = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
+
+# parametros da conversa, fixos e declarados pela mesma razao de GERACAO: temperatura zero e
+# semente fixa fazem a mesma pergunta, sobre os mesmos dados, receber a mesma resposta - o
+# que torna a verificacao reproduzivel. num_predict limita a resposta a ~300 palavras.
+OPCOES_CONVERSA = {"temperature": 0, "seed": 42, "num_ctx": 8192, "num_predict": 450}
+# quanto tempo o Ollama mantem o modelo na memoria depois da ultima chamada
+MANTER_CARREGADO = "15m"
 
 # o modelo de sentimento rotula em ingles; a aplicacao e em portugues. as chaves LABEL_n
 # cobrem o caso de o repositorio vir sem id2label nomeado, quando o pipeline devolve o indice.
@@ -74,6 +106,13 @@ AVISOS = {
         "próprios do resumo contra o texto de origem; o que ela aponta como ausente não está "
         "no original. Nenhum valor usado pelo projeto vem daqui: os indicadores e o índice "
         "são apurados por `nucleo.py` a partir dos dados oficiais."
+    ),
+    "conversa": (
+        "Resposta gerada por modelo de linguagem, não revisada por pessoa. O modelo recebe os "
+        "dados do projeto já apurados por `nucleo.py` e é instruído a não calcular nem "
+        "estimar; mesmo assim pode errar. Toda resposta traz a conferência dos seus números, "
+        "datas e nomes próprios contra os dados que o modelo recebeu — o que ela aponta como "
+        "ausente não está nos dados. Não é recomendação de investimento financeiro."
     ),
 }
 
@@ -158,7 +197,123 @@ def pasta_do_cache():
 def ja_baixado(tarefa):
     # se a pasta existe, a proxima carga daquele modelo nao precisa de rede
     nome = MODELOS[tarefa]["modelo"]
+    if MODELOS[tarefa].get("servidor") == "ollama":
+        return nome in modelos_no_ollama()
     return (Path(pasta_do_cache()) / f"models--{nome.replace('/', '--')}").exists()
+
+
+# ---------------------------------------------------------------- ollama (TP5)
+
+def _ollama(caminho, corpo=None, prazo=5):
+    """Chamada ao Ollama local. Devolve o JSON da resposta.
+
+    Traduz a falha nos mesmos erros nomeados das outras tarefas, para que api.py responda do
+    mesmo jeito: Ollama fora do ar ou modelo nao baixado viram ModeloIndisponivel (503).
+    """
+    try:
+        if corpo is None:
+            resposta = requests.get(f"{OLLAMA}{caminho}", timeout=prazo)
+        else:
+            resposta = requests.post(f"{OLLAMA}{caminho}", json=corpo, timeout=prazo)
+    except requests.exceptions.RequestException as erro:
+        raise ModeloIndisponivel(
+            f"o Ollama não respondeu em {OLLAMA} ({type(erro).__name__}). Inicie o Ollama nesta "
+            "máquina — pelo aplicativo, ou com `ollama serve` num terminal."
+        ) from erro
+    if resposta.status_code == 404:
+        nome = MODELOS["conversa"]["modelo"]
+        raise ModeloIndisponivel(
+            f"o modelo {nome} não está no Ollama. Baixe-o uma vez com `ollama pull {nome}` "
+            "(4,9 GB, precisa de rede); depois disso a conversa roda offline."
+        )
+    if not resposta.ok:
+        raise ErroDeInferencia(f"o Ollama respondeu HTTP {resposta.status_code}: {resposta.text[:300]}")
+    return resposta.json()
+
+
+def modelos_no_ollama():
+    # nomes dos modelos baixados no Ollama; vazio se ele nao responde. Prazo curto de
+    # proposito: e chamada por GET /saude, que tem de continuar barata.
+    try:
+        return {m.get("name") for m in _ollama("/api/tags", prazo=2).get("models", [])}
+    except (ModeloIndisponivel, ErroDeInferencia):
+        return set()
+
+
+def _dispositivo(tamanho, na_gpu):
+    # o Ollama informa quanto do modelo esta na memoria de video; o resto fica na RAM
+    if not tamanho or not na_gpu:
+        return "cpu"
+    if na_gpu >= tamanho:
+        return "gpu"
+    return f"gpu ({na_gpu / tamanho:.0%}) + cpu"
+
+
+def _ficha_ollama(tarefa):
+    # mesma forma da ficha das outras tarefas. Aqui arquitetura e parametros vem do proprio
+    # Ollama, que os conhece antes da carga; nas outras so se sabe depois dela.
+    config = MODELOS[tarefa]
+    estado = _ESTADO[tarefa]
+    nome = config["modelo"]
+    baixado = nome in modelos_no_ollama()
+    carregado, arquitetura, parametros, dispositivo = False, None, None, None
+    if baixado:
+        try:
+            info = _ollama("/api/show", {"model": nome})
+            detalhes = info.get("details", {})
+            arquitetura = f"{detalhes.get('family', '?')} · {detalhes.get('quantization_level', '?')}"
+            parametros = info.get("model_info", {}).get("general.parameter_count")
+            for item in _ollama("/api/ps", prazo=2).get("models", []):
+                if item.get("name") == nome:
+                    carregado = True
+                    dispositivo = _dispositivo(item.get("size", 0), item.get("size_vram", 0))
+        except (ModeloIndisponivel, ErroDeInferencia):
+            pass
+    return {
+        "tarefa": tarefa,
+        "descricao": config["descricao"],
+        "modelo": nome,
+        "tarefa_huggingface": config["tarefa_hf"],
+        "gerativo": config["gerativo"],
+        "carregado": carregado,
+        "ja_baixado": baixado,
+        "arquitetura": arquitetura,
+        "parametros": parametros,
+        "dispositivo": dispositivo,
+        "limite_de_tokens": config["limite_tokens"],
+        "rotulos": config["rotulos"],
+        "segundos_de_carga": estado["segundos_de_carga"],
+        "carregado_em": estado["carregado_em"],
+        "erro": estado["erro"],
+        "aviso": AVISOS[tarefa],
+    }
+
+
+def _carregar_ollama(tarefa):
+    # pede ao Ollama que ponha o modelo na memoria, com a mesma janela que a conversa usa -
+    # com outra janela ele recarregaria na primeira pergunta. A falha NAO e memorizada, ao
+    # contrario das outras tarefas: conferir o Ollama custa uma requisicao local, e ele pode
+    # ser iniciado a qualquer momento depois da subida do servico.
+    config = MODELOS[tarefa]
+    estado = _ESTADO[tarefa]
+    inicio = time.perf_counter()
+    try:
+        _ollama(
+            "/api/generate",
+            {"model": config["modelo"], "keep_alive": MANTER_CARREGADO,
+             "options": {"num_ctx": OPCOES_CONVERSA["num_ctx"]}},
+            prazo=300,
+        )
+    except (ModeloIndisponivel, ErroDeInferencia) as erro:
+        estado["erro"] = str(erro)
+        raise ModeloIndisponivel(str(erro)) from erro
+    estado.update({
+        "motor": "ollama",
+        "erro": None,
+        "carregado_em": datetime.now().isoformat(timespec="seconds"),
+        "segundos_de_carga": round(time.perf_counter() - inicio, 2),
+    })
+    return estado["motor"]
 
 
 def conferir_tarefa(tarefa):
@@ -178,6 +333,9 @@ def carregar(tarefa, forcar=False):
     conferir_tarefa(tarefa)
     config = MODELOS[tarefa]
     estado = _ESTADO[tarefa]
+
+    if config.get("servidor") == "ollama":
+        return _carregar_ollama(tarefa)
 
     if forcar:
         estado.update({"motor": None, "erro": None})
@@ -233,6 +391,8 @@ def carregar(tarefa, forcar=False):
 def ficha(tarefa):
     """Ficha de um modelo e situacao da carga. Nao carrega o modelo, apenas relata."""
     conferir_tarefa(tarefa)
+    if MODELOS[tarefa].get("servidor") == "ollama":
+        return _ficha_ollama(tarefa)
     config = MODELOS[tarefa]
     estado = _ESTADO[tarefa]
     motor = estado["motor"]
@@ -263,6 +423,9 @@ def informacoes():
         "cache_local": pasta_do_cache(),
         "bibliotecas": versoes(),
         "parametros_de_geracao": GERACAO,
+        # edited 25-11-2026 (TP5): campos novos, acrescentados sem mudar os anteriores
+        "parametros_da_conversa": OPCOES_CONVERSA,
+        "servidor_da_conversa": OLLAMA,
         "modelos": [ficha(tarefa) for tarefa in TAREFAS],
     }
 
@@ -364,11 +527,46 @@ def resumir(textos):
     return saida
 
 
-# despacho por tarefa, para que api.py nao precise de um if por rota
+def conversar(mensagens):
+    """Envia uma conversa ao modelo local e devolve a resposta e o seu custo.
+
+    `mensagens` ja vem no formato do Ollama - papeis system, user e assistant. Quem a monta,
+    com os dados do projeto, a memoria e as regras do assistente, e assistente.py; aqui so
+    ha o transporte e a contabilidade de tokens e de tempo.
+    """
+    config = MODELOS["conversa"]
+    estado = _ESTADO["conversa"]
+    inicio = time.perf_counter()
+    try:
+        bruto = _ollama(
+            "/api/chat",
+            {"model": config["modelo"], "messages": mensagens, "stream": False,
+             "keep_alive": MANTER_CARREGADO, "options": OPCOES_CONVERSA},
+            prazo=300,
+        )
+    except ModeloIndisponivel as erro:
+        estado["erro"] = str(erro)
+        raise
+    estado["erro"] = None
+    return {
+        "resposta": str(bruto.get("message", {}).get("content", "")).strip(),
+        "tokens_prompt": int(bruto.get("prompt_eval_count") or 0),
+        "tokens_resposta": int(bruto.get("eval_count") or 0),
+        # 'length' quer dizer que a resposta bateu em num_predict e saiu cortada
+        "resposta_cortada": bruto.get("done_reason") == "length",
+        "segundos_de_carga": round((bruto.get("load_duration") or 0) / 1e9, 2),
+        "segundos": round(time.perf_counter() - inicio, 2),
+    }
+
+
+# despacho por tarefa, para que api.py nao precise de um if por rota. A conversa fica fora:
+# ela recebe uma lista de mensagens, nao uma lista de textos, e tem rota propria.
 EXECUTORES = {"sentimento": classificar, "resumo": resumir}
 
 
 def processar(tarefa, textos):
     """Executa a tarefa pedida sobre a lista de textos."""
     conferir_tarefa(tarefa)
+    if tarefa not in EXECUTORES:
+        raise TarefaDesconhecida(f"a tarefa {tarefa} tem rota própria: POST /assistente")
     return EXECUTORES[tarefa](textos)

@@ -23,7 +23,10 @@ DOCS = {
     "Data Summary Report": RAIZ / "2_data_acquisition" / "data_summary_report.md",
     "Plano de uso de LLM": RAIZ / "3_modeling" / "plano_llm.md",
     "Escolha do modelo de linguagem": RAIZ / "3_modeling" / "modelo_llm.md",
+    # edited 25-11-2026 (TP5): o documento do assistente e o relatorio final do projeto
+    "Assistente com memória": RAIZ / "3_modeling" / "assistente_llm.md",
     "Referência da API": RAIZ / "4_deployment" / "api_reference.md",
+    "Relatório final": RAIZ / "5_customer_acceptance" / "relatorio_final.md",
 }
 
 METODOS_INDICE = ["min-max entre UFs", "distancia de 100%"]

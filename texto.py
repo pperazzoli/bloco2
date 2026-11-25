@@ -4,6 +4,9 @@
 # edited 16-11-2026 (TP4): entrou conferir_resumo, que compara um resumo gerado por modelo
 # com o texto de origem. Mora aqui, e nao em modelo_llm.py, porque nao usa modelo nenhum:
 # e comparacao lexica, da mesma familia de mencoes_uf e temas_do_texto.
+# edited 25-11-2026 (TP5): a conferencia ganhou o segundo consumidor, a resposta do
+# assistente de assistente.py, em conferir_resposta. A logica e uma so, em _conferir; o
+# comportamento de conferir_resumo nao mudou.
 
 import re
 import unicodedata
@@ -187,6 +190,13 @@ def _aparece(termo, plano):
     return re.search(rf"(?<!\w){re.escape(alvo)}(?!\w)", plano) is not None
 
 
+def _inicio_de_frase(texto, posicao):
+    # verdadeiro quando a palavra abre o texto, uma frase, uma linha ou um item de lista
+    antes = texto[:posicao].rstrip(" \t")
+    return (not antes or antes[-1] in ".!?:;\n"
+            or re.search(r"(^|\n)\s*(\d+[.)]|[-•])$", antes) is not None)
+
+
 def conferir_resumo(resumo, original):
     """Confere se cada afirmacao verificavel do resumo aparece no texto de origem.
 
@@ -194,6 +204,36 @@ def conferir_resumo(resumo, original):
     com mais frequencia - numero, data e nome proprio - e checa cada um contra o original.
     Devolve a lista conferida, com os ausentes primeiro, e a contagem.
     """
+    return _conferir(
+        resumo, original, "números, datas e nomes próprios do resumo procurados no texto de origem",
+    )
+
+
+# decimal com ponto ou virgula: "81.1" e "81,1" sao o mesmo numero
+_DECIMAL = re.compile(r"(\d)[.,](\d)")
+
+
+def conferir_resposta(resposta, dados):
+    """Confere a resposta do assistente contra os dados que o modelo recebeu no prompt.
+
+    Mesma conferencia do resumo, com tres ajustes, todos por causa da forma da resposta:
+    palavra isolada com maiuscula em inicio de frase ou de item de lista nao conta como nome
+    proprio - uma resposta de varias frases comecaria a apontar "Considerando" e "Recomendo";
+    o separador decimal e unificado, para que "81.1" valha como o "81,1" da tabela; e a sigla
+    generica "UF" nao gruda no nome que vem depois dela. Nome composto em inicio de frase
+    continua conferido: "Rio Grande do Sul" e apontado se faltar.
+    """
+    limpa = _DECIMAL.sub(r"\1,\2", re.sub(r"[*_`#]+", "", resposta))
+    # "a UF Acre": a sigla generica colaria no nome e o grupo "UF Acre" nao estaria nos dados
+    limpa = re.sub(r"\bUFs?\b", lambda m: m.group(0).lower(), limpa)
+    return _conferir(
+        limpa, _DECIMAL.sub(r"\1,\2", dados),
+        "números, datas e nomes próprios da resposta procurados nos dados que o modelo recebeu",
+        inicio_de_frase_conta=False,
+    )
+
+
+def _conferir(gerado, original, metodo, inicio_de_frase_conta=True):
     plano = normalizar(original)
     itens = []
     vistos = set()
@@ -206,17 +246,21 @@ def conferir_resumo(resumo, original):
         vistos.add(chave)
         itens.append({"tipo": tipo, "termo": limpo, "no_original": _aparece(limpo, plano)})
 
-    for numero in DIGITOS.findall(resumo):
+    for numero in DIGITOS.findall(gerado):
         registrar("número", numero)
 
-    for token in TOKEN.findall(resumo):
+    for token in TOKEN.findall(gerado):
         achatado = normalizar(token)
         if achatado in NUMEROS_POR_EXTENSO:
             registrar("número", token)
         elif achatado in EXPRESSOES_DE_DATA:
             registrar("data", token)
 
-    for grupo in NOME_PROPRIO.findall(resumo):
+    for achado in NOME_PROPRIO.finditer(gerado):
+        grupo = achado.group(0)
+        if (not inicio_de_frase_conta and len(grupo.split()) == 1
+                and _inicio_de_frase(gerado, achado.start())):
+            continue
         limpo = _sem_artigo_inicial(grupo)
         achatado = normalizar(limpo)
         # descarta o que ja foi contado como numero ou data e a maiuscula de inicio de frase
@@ -233,6 +277,6 @@ def conferir_resumo(resumo, original):
         "conferidos": len(itens),
         "ausentes": ausentes,
         "itens": itens,
-        "metodo": "números, datas e nomes próprios do resumo procurados no texto de origem",
+        "metodo": metodo,
         "ressalva": RESSALVA_CONFERENCIA,
     }

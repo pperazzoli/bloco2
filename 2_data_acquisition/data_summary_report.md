@@ -8,6 +8,9 @@ está indicado no início de cada seção.
 Selenium (seção 1.4), o canal de entrada por API (seção 4.2) e a avaliação do corpus como
 insumo para tarefas de LLM (seção 6). O que entrou nesta revisão está marcado
 *edited 16-11-2026*.
+**edited 25-11-2026 (TP5):** acrescentada a seção 8, que acompanha cada dado coletado — por
+API ou por raspagem — da origem ao insight, registra como o dado vira contexto do assistente
+com memória e o que esse uso revelou sobre o próprio dado.
 
 ---
 
@@ -441,3 +444,111 @@ perto de rastreabilidade que texto gerado permite chegar.
 
 **7.6 O inventário permanece válido sem alteração.** Nenhuma fonte nova, nenhum arquivo
 alterado: os nove arquivos de `data/` continuam com o conteúdo e a data do TP2.
+
+---
+
+## 8. O ciclo completo: do dado coletado ao insight
+
+*Adicionado em novembro — TP5.*
+
+As seções 1 a 7 descrevem cada fonte e o que se aprendeu dela em cada etapa. Esta acompanha
+os dados no sentido do uso: por onde cada um entrou, que tratamento recebeu, onde foi usado e
+que conhecimento produziu — até chegar ao assistente da solução final, descrito em
+[`../3_modeling/assistente_llm.md`](../3_modeling/assistente_llm.md).
+
+### 8.1 Cada ativo, da coleta ao uso
+
+| Ativo | Coleta | Tratamento | Uso analítico | Uso pelos modelos de IA |
+| --- | --- | --- | --- | --- |
+| `ods4_uf.csv` — 189 observações, 7 indicadores, 27 UFs | API de Agregados do IBGE, `coleta.py` | proveniência por linha (`fonte`, `fonte_url`); normalização min-max ou distância de 100% em `nucleo.py` | Índice de Prioridade, ranking, mapa, dispersão, perfil de UF, reporte ESG | **contexto do assistente**: ranking, valores por UF, média das UFs, diferença, posição em cada indicador e comparação direta, tudo calculado antes do prompt |
+| Domínio territorial — código, sigla, região | API de Localidades do IBGE | chave de junção `cod_uf` | agrupamento por região, cores, filtros | blocos de região do assistente e a detecção de região na pergunta |
+| `malha_uf.geojson` — 27 feições | API de Malhas do IBGE | sentido dos anéis invertido para o Plotly | mapa coroplético | — |
+| `noticias_educacao.csv` — 105 matérias, 59.185 palavras | Beautiful Soup sobre 4 fontes, `scraping.py`, com `robots.txt` conferido | HTML removido, data em ISO, UFs e temas por dicionário | nuvem de palavras, estatísticas, menções por UF ao lado da carência | sentimento e resumo no TP4; **matérias do contexto do assistente**, selecionadas pelo foco da conversa e citadas pelo número |
+| `noticias_termos.csv`, `noticias_por_uf.csv`, `noticias_por_tema.csv` | derivadas por `scraping.py` | contagem | painel de notícias e reporte | — |
+| `fontes.csv` — 9 fontes | catálogo mantido no projeto | — | seção de rastreabilidade do reporte | lista de fontes que acompanha cada resposta do assistente |
+| `robots_verificacao.csv` | `scraping.py` | — | registro de conformidade na tela | — |
+| Dado do usuário — upload e `POST /indicadores` | sessão e memória do serviço | `origem = usuário` ou `api` | entra no índice da sessão ou da execução | o que chega por `POST /indicadores` entra no contexto do assistente; o upload da sessão não chega a ele (seção 8.4) |
+
+Três desses ativos — os indicadores, o domínio territorial e o corpus — atravessam o ciclo
+inteiro. O dado que mais rende é o mais simples: as 189 linhas de `ods4_uf.csv` alimentam o
+índice, cinco páginas, o reporte e o assistente, e cada número que chega ao usuário por
+qualquer desses caminhos carrega a mesma `fonte_url`.
+
+### 8.2 O que os dados mostram
+
+Os achados abaixo vêm de `nucleo.py`, sem modelo, e são os mesmos que o assistente encontra e
+explica quando perguntado:
+
+- **A carência se concentra no Norte e no Nordeste.** As dez UFs de maior prioridade são
+  cinco de cada região, e o índice médio é de 48,6 no Norte e 40,1 no Nordeste, contra 20,3
+  no Sul, 20,2 no Sudeste e 18,4 no Centro-Oeste. A amplitude vai de 81,1 no Acre a 11,7 no
+  Distrito Federal.
+- **O topo é robusto à escolha do método.** Os dois métodos de normalização dão o mesmo
+  conjunto de dez UFs prioritárias; muda só a quinta posição, Maranhão em um e Amazonas no
+  outro. A decisão de alocação não depende de uma escolha técnica que o usuário talvez não
+  domine.
+- **A maior desigualdade está na infraestrutura escolar.** Internet para fins pedagógicos
+  varia 73 pontos entre as UFs — de 17,8% no Pará a 90,8% no Espírito Santo — e computador,
+  67 pontos. Alfabetização, o indicador mais homogêneo, varia 11,6. É na meta 4.a que o
+  investimento social privado tem ação mais direta: equipamento e conectividade.
+- **O Acre está abaixo da média das UFs nos sete indicadores**, com as maiores distâncias em
+  internet (22,9% contra média de 62,6%), computador (46,8% contra 86,4%) e infraestrutura
+  acessível (51,5% contra 84,7%).
+- **O índice composto esconde lacunas pontuais.** Santa Catarina, 16ª no índice, empata com
+  Roraima no pior valor do país em docentes com formação adequada, 75,4%. É o tipo de achado
+  que o ranking sozinho não mostra e que a conversa encontra quando a pergunta é por
+  indicador.
+- **A imprensa olha pouco para onde a carência é maior.** O Acre, 1º no índice, aparece em
+  uma das 105 matérias; o Amapá, 4º, também em uma. Só quatro matérias citam alguma das cinco
+  UFs prioritárias.
+
+### 8.3 O que o uso como contexto revelou sobre o dado
+
+Montar o bloco de dados do assistente foi a primeira vez que o dado precisou ser lido inteiro
+por um leitor sem contexto — o modelo. Quatro coisas apareceram, nenhuma visível antes.
+
+**8.3.1 O corpus não tem nenhuma matéria sobre creche.** Perguntado o que as notícias dizem
+sobre creches e primeira infância, o assistente respondeu que as matérias recuperadas tratam
+de primeira infância mas não mencionam creche. Conferido no corpus: **zero** das 105 matérias
+contêm a palavra, no título, no resumo ou no corpo. As oito matérias do tema 4.2 recebem o
+tema por outros termos do dicionário. É lacuna de cobertura do período coletado, não da
+busca — e é o tipo de ausência que um modelo sem os dados teria preenchido.
+
+**8.3.2 O resumo das fontes de sindicação traz o rodapé do feed.** Nas matérias do
+Observatório do Terceiro Setor, a coluna `resumo` termina em "O post … apareceu primeiro em
+Observatório do 3° Setor", texto do WordPress e não da matéria. O corte é feito na montagem
+do contexto, em `assistente.py`; o corpus em `data/` não foi alterado, porque a coluna é o
+que o feed publicou e serve de referência humana desde o TP4.
+
+**8.3.3 "Média nacional" e "média das UFs" não são a mesma coisa.** A média que o painel
+mostra como referência é a média simples das 27 UFs, não a taxa nacional ponderada pela
+população, que o IBGE publica à parte. O contexto do assistente passou a dizer "média das
+UFs", para que nenhuma resposta a apresente como taxa do Brasil.
+
+**8.3.4 Nos sete indicadores, valor maior é melhor — e isso virou premissa.** Toda a
+linguagem de comparação do assistente ("pior situação", "maior carência") depende disso, e o
+índice também: `nucleo.calcular_indice` trata valor baixo como carência. Um indicador futuro
+em que menor é melhor — taxa de abandono, por exemplo — exige marcar o sentido no
+`ods4_uf.csv` antes de entrar, ou o índice e o assistente o leriam ao contrário. Fica
+registrado como regra de entrada de dado novo.
+
+### 8.4 O volume que vai ao modelo, e o que não vai
+
+Cada pergunta leva ao modelo de 1,1 mil a 4,4 mil *tokens* nas conversas de teste: o ranking das 27 UFs sempre, e
+o resto conforme o foco da conversa — indicadores de até três UFs, a lista de até três
+indicadores, o resumo de até duas regiões e até quatro matérias. A conclusão da seção 6.1 se
+confirma pela terceira vez: com a seleção pelo foco, **não é preciso banco vetorial**, e o
+critério de seleção é inspecionável — é a memória que a página mostra.
+
+Duas coisas não vão ao modelo. O corpo integral das matérias, porque o lead basta para o
+assistente localizar e citar, e o link leva ao texto inteiro. E o CSV enviado pela página de
+upload, que vive na sessão do Streamlit e não é enviado ao serviço; o assistente usa os
+indicadores oficiais e o que chegou por `POST /indicadores`, e a página avisa quando há
+upload ativo.
+
+### 8.5 Inventário
+
+Nenhum arquivo novo em `data/`, nenhum alterado. A conversa com o assistente segue a regra da
+seção 7.5: resultado de modelo não é dado apurado, e não é gravado. Vive na sessão do
+usuário e no Markdown que ele baixar — e esse arquivo sai com a conferência e as fontes de
+cada resposta, para que o texto gerado nunca circule sem procedência.

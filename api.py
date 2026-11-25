@@ -5,6 +5,10 @@
 # local de modelo_llm.py; toda rota passou a declarar response_model, de modo que o FastAPI
 # valide a saida antes de serializar; a falha de carga do modelo virou um handler de excecao
 # que responde 503 sem derrubar as rotas de dados.
+# edited 25-11-2026 (TP5): entrou POST /assistente, a conversa com memoria de assistente.py,
+# servida pelo modelo local llama3.1:8b via Ollama. A rota nao guarda estado: a memoria vem
+# na requisicao e volta atualizada na resposta. GET /modelo passou a relatar o terceiro
+# modelo, e o 503 ganhou a instrucao do Ollama.
 #
 # A API nao tem logica propria: le os mesmos arquivos de data/ e chama as mesmas funcoes de
 # nucleo.py que a aplicacao Streamlit chama. E deliberado - o indice que esta API devolve e,
@@ -27,6 +31,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
+import assistente as at
 import modelo_llm as ml
 import nucleo as nc
 
@@ -39,9 +44,10 @@ ETIQUETAS = [
         "name": "linguagem natural",
         "description": (
             "Processamento de texto por modelos que rodam **nesta máquina**, sem chamada a "
-            "serviço externo. Há um modelo por tarefa — sentimento e resumo —, cada um "
-            "carregado sob demanda e em separado: a primeira chamada de cada tarefa leva "
-            "alguns segundos, as seguintes respondem mais rápido.\n\n"
+            "serviço externo. Há um modelo por tarefa — sentimento, resumo e conversa —, cada "
+            "um carregado sob demanda e em separado: a primeira chamada de cada tarefa leva "
+            "alguns segundos, as seguintes respondem mais rápido. A conversa, em "
+            "`POST /assistente`, é servida pelo Ollama local.\n\n"
             "Quando um modelo não pode ser carregado, as rotas que dependem dele respondem "
             "**503** com o motivo e o que fazer, e as rotas de dados continuam funcionando."
         ),
@@ -50,7 +56,7 @@ ETIQUETAS = [
 
 app = FastAPI(
     title="Bússola ESG Educação — API",
-    version="1.1.0",
+    version="1.2.0",
     openapi_tags=ETIQUETAS,
     description=(
         "Serviço de consulta aos indicadores oficiais de monitoramento da ODS 4 por Unidade "
@@ -66,7 +72,10 @@ app = FastAPI(
         "descritos em `3_modeling/modelo_llm.md`: um de classificação de sentimento e um de "
         "resumo. O resultado desse processamento é camada de contexto — nunca entra no cálculo "
         "do índice, e toda resposta do grupo carrega o aviso correspondente. O resumo é texto "
-        "**gerado**, e o campo `gerativo` da resposta o marca como tal."
+        "**gerado**, e o campo `gerativo` da resposta o marca como tal.\n\n"
+        "`POST /assistente` responde perguntas sobre os indicadores, o índice e as notícias "
+        "com **memória da conversa**, a partir dos dados já apurados pelo projeto, e confere "
+        "cada número, data e nome próprio da resposta contra esses dados."
     ),
 )
 
@@ -207,6 +216,56 @@ class Texto(BaseModel):
         return limpo
 
 
+# edited 25-11-2026 (TP5): entrada da conversa com o assistente
+
+class Mensagem(BaseModel):
+    """Uma mensagem já trocada na conversa."""
+
+    papel: Literal["usuario", "assistente"]
+    conteudo: str = Field(..., max_length=8000)
+
+
+class Memoria(BaseModel):
+    """O foco da conversa até aqui: o que já foi citado e decide os dados da próxima resposta."""
+
+    ufs: list[str] = Field(default_factory=list, examples=[["BA", "PE"]])
+    regioes: list[str] = Field(default_factory=list, examples=[["Nordeste"]])
+    temas: list[str] = Field(default_factory=list, examples=[["4.2 primeira infancia"]])
+    indicadores: list[str] = Field(default_factory=list)
+
+
+class Pergunta(BaseModel):
+    """Pergunta ao assistente, com o histórico e a memória que a resposta anterior devolveu."""
+
+    pergunta: str = Field(..., min_length=3, max_length=1000,
+                          examples=["Como está a Bahia no índice de prioridade?"])
+    historico: list[Mensagem] = Field(
+        default_factory=list, max_length=60,
+        description="Mensagens anteriores, na ordem. Só as últimas seis voltam ao modelo.",
+    )
+    memoria: Memoria = Field(default_factory=Memoria,
+                             description="O campo `memoria` da resposta anterior; vazio no início da conversa.")
+    pesos: dict[str, float] | None = Field(
+        None, description="Peso de cada indicador, como na página Índice de prioridade. Vazio: pesos iguais.",
+    )
+    metodo: str = Field(nc.METODOS_INDICE[0], description="`min-max entre UFs` ou `distancia de 100%`.")
+
+    @field_validator("pergunta")
+    @classmethod
+    def pergunta_sem_espaco(cls, valor):
+        limpo = valor.strip()
+        if len(limpo) < 3:
+            raise ValueError("a pergunta precisa ter ao menos 3 caracteres fora dos espaços")
+        return limpo
+
+    @field_validator("metodo")
+    @classmethod
+    def metodo_conhecido(cls, valor):
+        if valor not in nc.METODOS_INDICE:
+            raise ValueError(f"metodo deve ser um de {nc.METODOS_INDICE}")
+        return valor
+
+
 # ---------------------------------------------------------------- modelos de resposta
 
 # Response models. O FastAPI valida a saida de cada rota contra a classe declarada em
@@ -344,6 +403,9 @@ class RespostaModelos(BaseModel):
     cache_local: str
     bibliotecas: dict[str, str | None]
     parametros_de_geracao: dict = Field(..., description="Parâmetros fixos usados nas tarefas gerativas.")
+    # edited 25-11-2026 (TP5): campos novos, com valor padrao para nao mudar o contrato anterior
+    parametros_da_conversa: dict = Field(default_factory=dict, description="Parâmetros fixos da conversa, enviados ao Ollama.")
+    servidor_da_conversa: str | None = Field(None, description="Endereço do Ollama local que serve o modelo da conversa.")
     modelos: list[FichaModelo]
 
 
@@ -457,6 +519,57 @@ class RespostaNoticias(BaseModel):
     dados: list[NoticiaClassificada]
 
 
+# edited 25-11-2026 (TP5): resposta da conversa com o assistente
+
+class NoticiaCitada(BaseModel):
+    """Matéria do corpus que entrou no contexto da resposta, com o número que a cita."""
+
+    n: int = Field(..., description="Número entre colchetes usado na resposta, como [1].")
+    titulo: str
+    fonte: str
+    data: str | None = None
+    url: str | None = None
+
+
+class FonteIndicador(BaseModel):
+    """Proveniência de um indicador presente no contexto da resposta."""
+
+    indicador: str
+    indicador_ods: str
+    ano: int
+    fonte: str
+    fonte_url: str
+
+
+class FontesDaResposta(BaseModel):
+    """As fontes do que o modelo recebeu. Vêm do contexto, não do texto gerado."""
+
+    indicadores: list[FonteIndicador]
+    noticias: list[NoticiaCitada]
+
+
+class RespostaAssistente(BaseModel):
+    """Resposta do assistente, com a memória atualizada, os dados usados e a conferência."""
+
+    resposta: str = Field(..., description="Texto gerado pelo modelo local.")
+    modelo: str
+    gerativo: bool
+    memoria: Memoria = Field(..., description="Devolva este campo na próxima pergunta para manter o foco da conversa.")
+    foco: Memoria = Field(..., description="UFs, regiões, temas e indicadores cujos dados entraram nesta resposta.")
+    ufs_na_resposta: list[str] = Field(..., description="UFs que a própria resposta cita, na ordem em que aparecem.")
+    fontes: FontesDaResposta
+    conferencia: Conferencia
+    contexto: str = Field(..., description="O bloco de dados exatamente como o modelo o recebeu.")
+    mensagens_lembradas: int = Field(..., description="Mensagens do histórico que voltaram ao modelo.")
+    tokens_prompt: int
+    tokens_resposta: int
+    limite_de_tokens: int
+    resposta_cortada: bool = Field(..., description="Verdadeiro quando a resposta bateu no limite de tokens e saiu cortada.")
+    segundos: float
+    analisado_em: str
+    aviso: str
+
+
 # ------------------------------------------------- tratamento de erro do modelo
 
 # As duas excecoes de modelo_llm.py sao traduzidas aqui, em um lugar so, em vez de num
@@ -476,6 +589,7 @@ def modelo_indisponivel(request: Request, erro: ml.ModeloIndisponivel):
                 "o_que_fazer": [
                     "confira se as dependências estão instaladas: pip install -r requirements.txt",
                     "a primeira carga baixa os pesos do HuggingFace Hub e precisa de rede",
+                    "para a conversa: inicie o Ollama e baixe o modelo uma vez com ollama pull llama3.1:8b",
                     "tente carregar de novo em POST /modelo/carregar?tarefa=<tarefa>",
                     "consulte GET /modelo para ver a situação de cada modelo",
                 ],
@@ -548,6 +662,7 @@ def raiz():
             "POST /modelo/carregar": "carrega um modelo na memória, ou tenta de novo após falha",
             "POST /processar_texto": "processa um texto com um modelo local: sentimento ou resumo",
             "POST /noticias/sentimento": "aplica o modelo ao corpus de notícias coletado",
+            "POST /assistente": "conversa com memória sobre os indicadores, o índice e as notícias",
         },
     }
 
@@ -811,6 +926,7 @@ def descartar_enviados():
 # linguagem. A separacao e proposital: se o modelo nao carregar, elas respondem 503 e todo o
 # resto do servico continua funcionando - a mesma postura que o Project Charter registra para
 # a ausencia de rede na secao 10.
+# edited 25-11-2026 (TP5): sao cinco, com POST /assistente no fim do grupo, sob a mesma regra.
 
 @app.get("/modelo", tags=["linguagem natural"], response_model=RespostaModelos,
          summary="Ficha dos modelos de linguagem")
@@ -837,7 +953,7 @@ def ficha_dos_modelos():
 @app.post("/modelo/carregar", tags=["linguagem natural"], response_model=FichaModelo,
           responses=ERRO_DE_CARGA, summary="Carrega um modelo na memória")
 def carregar_modelo(
-    tarefa: str = Query("sentimento", description="Qual modelo carregar: `sentimento` ou `resumo`."),
+    tarefa: str = Query("sentimento", description="Qual modelo carregar: `sentimento`, `resumo` ou `conversa`."),
 ):
     """Carrega os pesos de um modelo na memória, ou tenta de novo depois de uma falha.
 
@@ -990,6 +1106,48 @@ def sentimento_das_noticias(
         "aviso": ml.AVISOS["sentimento"],
         "dados": classificadas,
     }
+
+
+@app.post("/assistente", tags=["linguagem natural"], response_model=RespostaAssistente,
+          responses=ERROS_DO_MODELO, summary="Conversa com o assistente, com memória")
+def conversar_com_o_assistente(entrada: Pergunta):
+    """Responde uma pergunta sobre os dados do projeto, lembrando o que já foi conversado.
+
+    Criada no TP5. O modelo é o `llama3.1:8b`, servido pelo **Ollama nesta máquina**: nenhuma
+    pergunta e nenhum dado saem do computador.
+
+    **Memória em duas camadas.** As últimas seis mensagens de `historico` voltam ao modelo,
+    que assim entende "e o Pará?" ou "a primeira delas". E `memoria` guarda o foco da
+    conversa — UFs, regiões, temas e indicadores já citados —, que decide **que dados** entram
+    no prompt. A rota não guarda estado: devolva o campo `memoria` desta resposta na próxima
+    pergunta. Esvaziar `historico` e `memoria` é começar outra conversa.
+
+    **Os números vêm prontos.** O modelo recebe o bloco de dados devolvido em `contexto`,
+    montado por `nucleo.py` — ranking, valores, médias, diferenças e posições — e é instruído
+    a não calcular nem estimar. `pesos` e `metodo` são os mesmos da página *Índice de
+    prioridade*, para que o índice citado na conversa seja o da tela.
+
+    **A resposta vem conferida.** `conferencia` lista cada número, data e nome próprio da
+    resposta dizendo se ele está nos dados que o modelo recebeu; `situacao: "revisar"`
+    significa que ao menos um não está. `fontes` traz a proveniência do que entrou no
+    contexto — os indicadores e as matérias, com a URL —, independentemente de o modelo citar.
+
+    ```json
+    {"pergunta": "Como está a Bahia no índice?", "historico": [], "memoria": {}}
+    ```
+
+    Erros: **422** se a pergunta for vazia ou o método desconhecido, **503** se o Ollama não
+    estiver no ar ou o modelo não tiver sido baixado, **500** se a geração falhar.
+    """
+    return at.responder(
+        entrada.pergunta,
+        [mensagem.model_dump() for mensagem in entrada.historico],
+        entrada.memoria.model_dump(),
+        dados_ativos(),
+        noticias(),
+        pesos=entrada.pesos,
+        metodo=entrada.metodo,
+    )
 
 
 # ---------------------------------------------------------------- execucao direta

@@ -3,6 +3,8 @@
 # edited 16-11-2026 (TP4): entrou a tarefa de resumo. A aba de texto passou a escolher entre
 # as duas tarefas, e o resumo gerado aparece ao lado do resumo escrito pela redacao, que e a
 # referencia humana prevista na tarefa 2.2 do plano de uso de LLM.
+# edited 25-11-2026 (TP5): a ficha dos modelos passou a listar tambem o da conversa, usado
+# pela pagina Assistente ESG, e o botao de carga ganhou chave por aba (ver painel_de_carga).
 #
 # Como a pagina de servico de api, esta e um cliente HTTP: nao importa modelo_llm.py nem
 # carrega modelo dentro do processo do Streamlit. Quem carrega os modelos e o servico do
@@ -88,8 +90,11 @@ ambiente = resposta["corpo"]
 FICHAS = {ficha["tarefa"]: ficha for ficha in ambiente["modelos"]}
 
 
-def painel_de_carga(tarefa):
+def painel_de_carga(tarefa, aba="texto"):
     """Mostra a situacao de um modelo e, se preciso, o botao que o carrega."""
+    # edited 25-11-2026 (TP5): 'aba' entra na chave do botao. O painel do sentimento aparece
+    # nas duas primeiras abas, e com a mesma chave o Streamlit recusava a pagina inteira
+    # (StreamlitDuplicateElementKey) sempre que o modelo ainda nao estava carregado.
     ficha = FICHAS[tarefa]
     colunas = st.columns([3, 1, 1])
     if ficha["carregado"]:
@@ -100,7 +105,7 @@ def painel_de_carga(tarefa):
 
     colunas[0].warning(f"Modelo ainda não carregado · `{ficha['modelo']}`")
     colunas[1].metric("Pesos em cache", "sim" if ficha["ja_baixado"] else "não")
-    if colunas[2].button("Carregar agora", type="primary", width="stretch", key=f"carregar_{tarefa}"):
+    if colunas[2].button("Carregar agora", type="primary", width="stretch", key=f"carregar_{tarefa}_{aba}"):
         with st.spinner(f"carregando o modelo de {tarefa}, isto leva alguns segundos"):
             sucesso, carga = chamar(
                 base, "/modelo/carregar", metodo="POST",
@@ -316,7 +321,7 @@ with corpus:
         "isso ele fica na aba *Processar um texto*, uma matéria por vez."
     )
 
-    painel_de_carga("sentimento")
+    painel_de_carga("sentimento", aba="corpus")
 
     noticias = utils.carregar_noticias()
     filtros = st.columns([2, 1, 1])
@@ -453,7 +458,11 @@ with corpus:
 # ------------------------------------------------------------ aba 3: ficha do modelo
 
 with modelo:
-    st.subheader("Os dois modelos")
+    st.subheader("Os modelos do serviço")
+    st.caption(
+        "Esta página usa os dois primeiros. O terceiro, de conversa, é o da página *Assistente "
+        "ESG*, e é servido pelo Ollama nesta máquina."
+    )
     # as fichas ja foram buscadas no topo da pagina, que interrompe a execucao se o servico
     # estiver fora do ar. reaproveitar evita uma segunda chamada por recarregamento de tela.
     linhas = []
@@ -467,8 +476,11 @@ with modelo:
             "Parâmetros": tarefa_ficha["parametros"] or 0,
             "Dispositivo": tarefa_ficha["dispositivo"] or "—",
             "Janela": f"{tarefa_ficha['limite_de_tokens']} tokens",
-            "Carga": (f"{tarefa_ficha['segundos_de_carga']} s"
-                      if tarefa_ficha["carregado"] else "não carregado"),
+            # edited 25-11-2026 (TP5): o modelo da conversa e carregado pelo Ollama, que nao
+            # informa a este processo quanto tempo a carga levou
+            "Carga": ("não carregado" if not tarefa_ficha["carregado"]
+                      else f"{tarefa_ficha['segundos_de_carga']} s" if tarefa_ficha["segundos_de_carga"] is not None
+                      else "no Ollama"),
         })
     st.dataframe(
         pd.DataFrame(linhas),

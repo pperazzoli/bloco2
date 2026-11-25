@@ -14,6 +14,12 @@ problema de negócio pede, aqui estão as que foram implementadas e por quê.
 > pode e inventou na verificação. A seção 5.2 registra o que ele inventou, com o texto gerado
 > lado a lado com o original, e a 5.3 descreve a conferência automática que passou a apontar
 > essas invenções em todo resumo. Quem for ler só um trecho deste documento, leia aqueles.
+>
+> **edited 25-11-2026 (TP5):** o registro de modelos ganhou uma terceira tarefa, `conversa`,
+> usada pelo assistente com memória da solução final. O modelo é o `llama3.1:8b`, servido
+> pelo Ollama local em vez de carregado pelo `transformers`, e a escolha está em
+> [`assistente_llm.md`](assistente_llm.md). Os dois modelos deste documento não mudaram, e a
+> conferência da seção 5.3 ganhou uma segunda consumidora, a resposta do assistente.
 
 ---
 

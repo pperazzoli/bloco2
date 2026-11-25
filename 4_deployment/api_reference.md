@@ -12,6 +12,11 @@ processa texto com modelos carregados localmente — um de classificação de se
 resumo; toda rota passou a declarar `response_model`; o tratamento de erro ganhou seção
 própria. A justificativa de cada modelo está em `3_modeling/modelo_llm.md`.*
 
+*Atualizado em 2026-11-25 (TP5): entrou `POST /assistente`, a conversa com memória sobre os
+dados do projeto, servida pelo modelo local `llama3.1:8b` via Ollama — seção 3.5. O serviço
+passou a quinze rotas, `GET /modelo` relata o terceiro modelo, e a verificação desta entrega
+está na seção 8. A decisão está em `3_modeling/assistente_llm.md`.*
+
 ---
 
 ## 1. Como subir o serviço
@@ -61,6 +66,23 @@ baixados do HuggingFace Hub para o cache local (`~/.cache/huggingface/hub`); dal
 carga é offline. Se um modelo não puder ser carregado, as rotas que dependem dele respondem
 **503** e todas as demais continuam atendendo normalmente — ver a seção 7.
 
+**1.4 O modelo da conversa** (TP5) — `POST /assistente` usa um terceiro modelo, que não é
+carregado por este processo: o `llama3.1:8b` é servido pelo **Ollama**, programa instalado à
+parte que roda nesta mesma máquina e responde em `http://127.0.0.1:11434`. Nenhuma biblioteca
+Python nova é necessária — o serviço fala com o Ollama por HTTP, com o `requests`.
+
+| Tarefa | Modelo | Pesos | Por resposta |
+| --- | --- | --- | --- |
+| `conversa` | `llama3.1:8b`, quantização Q4_K_M, via Ollama | 4,9 GB | de 2 a 25 s nesta máquina, com 68% do modelo na GPU |
+
+```bash
+ollama pull llama3.1:8b
+```
+
+O comando baixa os pesos uma vez. O endereço do Ollama pode ser trocado pela variável de
+ambiente `OLLAMA_URL`. Se o Ollama não estiver no ar, só `POST /assistente` e a carga da
+tarefa `conversa` respondem 503; o resto do serviço não muda.
+
 ---
 
 ## 2. Decisão de arquitetura: o núcleo compartilhado
@@ -101,7 +123,8 @@ o modelo de resumo não carregar, a classificação continua respondendo 200.
 
 ## 3. Rotas
 
-Quatorze rotas em quatro grupos. Todas respondem JSON e todas declaram `response_model`,
+Quinze rotas em quatro grupos — a décima quinta, `POST /assistente`, entrou no TP5. Todas
+respondem JSON e todas declaram `response_model`,
 de modo que a forma da resposta está na especificação OpenAPI e não só na documentação
 escrita (ver a seção 6). As de consulta devolvem um envelope com `total`, os `filtros`
 aplicados e a lista `dados`.
@@ -396,6 +419,85 @@ recurso, e assim nenhum intermediário a trata como resposta cacheável.
 > ressalva do risco 8.6 do Project Charter. O campo `aviso` repete isso em toda resposta, e a
 > tela o exibe.
 
+### 3.5 A conversa com memória
+
+*Adicionado em novembro — TP5.*
+
+**`POST /assistente`** — responde uma pergunta em linguagem natural sobre os indicadores, o
+índice e as notícias, **lembrando o que já foi conversado**. É a rota da solução final do
+projeto, consumida pela página *Assistente ESG*.
+
+Corpo da requisição:
+
+```json
+{
+  "pergunta": "E Pernambuco, comparado com ela?",
+  "historico": [
+    {"papel": "usuario", "conteudo": "Como está a Bahia no índice?"},
+    {"papel": "assistente", "conteudo": "A Bahia (BA) está na 7ª posição do índice..."}
+  ],
+  "memoria": {"ufs": ["BA"], "regioes": [], "temas": [], "indicadores": []},
+  "pesos": null,
+  "metodo": "min-max entre UFs"
+}
+```
+
+| Campo | Regra |
+| --- | --- |
+| `pergunta` | obrigatório, de 3 a 1.000 caracteres, espaços nas pontas descartados |
+| `historico` | opcional, até 60 mensagens, cada uma com `papel` em `usuario` ou `assistente`; só as **seis últimas** voltam ao modelo |
+| `memoria` | opcional: o campo `memoria` da resposta anterior; vazio no início da conversa |
+| `pesos` | opcional: peso de cada indicador, como na página *Índice de prioridade*; ausente, pesos iguais |
+| `metodo` | `min-max entre UFs` (padrão) ou `distancia de 100%`; outro valor é 422 |
+
+**A rota não guarda estado.** A memória vem na requisição e volta atualizada na resposta; quem
+conversa é que a guarda — a página, na sessão do navegador. Começar outra conversa é mandar
+`historico` e `memoria` vazios. Nenhuma conversa é gravada.
+
+**Como a resposta é produzida.** O foco da vez — as UFs, regiões, temas e indicadores que a
+pergunta cita, mais os que a memória guarda — decide o que entra no bloco de dados montado por
+`nucleo.py`: o ranking das 27 UFs, os indicadores das UFs em foco com média, diferença e
+posição, a comparação direta quando a pergunta compara, a lista completa dos indicadores em
+foco e até quatro matérias do corpus. O modelo recebe esse bloco, as regras do prompt e as
+seis últimas mensagens, e é instruído a não calcular nada. A resposta é então conferida
+contra o mesmo bloco.
+
+| Campo da resposta | O que traz |
+| --- | --- |
+| `resposta`, `modelo`, `gerativo` | o texto gerado, o modelo que o gerou e `gerativo: true` |
+| `memoria` | a memória atualizada — devolva-a na próxima pergunta |
+| `foco` | as UFs, regiões, temas e indicadores cujos dados entraram nesta resposta |
+| `ufs_na_resposta` | as UFs que a própria resposta cita, na ordem — a página as destaca no gráfico |
+| `fontes` | `indicadores`, com fonte e URL de cada um, e `noticias`, com o número `n` que a resposta usa para citá-las, título, fonte, data e URL |
+| `conferencia` | a mesma forma do bloco do resumo: `situacao`, `conferidos`, `ausentes` e `itens`, agora contra os dados que o modelo recebeu |
+| `contexto` | o bloco de dados **exatamente como o modelo o leu** |
+| `mensagens_lembradas` | quantas mensagens do histórico voltaram ao modelo |
+| `tokens_prompt`, `tokens_resposta`, `limite_de_tokens`, `resposta_cortada` | o custo da resposta e se ela bateu no limite de tamanho |
+| `segundos`, `analisado_em`, `aviso` | rastreabilidade do resultado |
+
+`fontes` vem do contexto, não do texto gerado: a lista das matérias e dos indicadores que o
+modelo recebeu acompanha toda resposta, **cite o modelo ou não**. É o requisito da tarefa 2.4
+do `plano_llm.md` — resposta sobre o corpus cita a matéria — cumprido sem depender do modelo.
+
+`contexto` está na resposta por transparência: quem integra a rota pode guardar, ao lado do
+texto gerado, exatamente o dado que o sustentou.
+
+```bash
+curl -X POST http://127.0.0.1:8000/assistente \
+  -H "Content-Type: application/json" \
+  -d '{"pergunta": "Quais são as cinco UFs com maior prioridade de investimento?"}'
+```
+
+Erros: **422** se a pergunta for vazia, curta ou longa demais, o `papel` ou o `metodo`
+desconhecido; **503** se o Ollama não responder ou o modelo não estiver nele, com o motivo e o
+`ollama pull` a rodar; **500** se a geração falhar com o modelo de pé.
+
+> **O assistente não calcula, não prevê e não recomenda investimento financeiro.** Os números
+> que ele cita chegam prontos no bloco de dados; pedidos de previsão e de recomendação
+> financeira são recusados por regra do prompt (escopo 2.2 do Project Charter). A conferência
+> pega número, data ou nome que não está nos dados, mas não pega um número verdadeiro posto no
+> lugar errado — risco 8.15 do Charter.
+
 ---
 
 ## 4. Decisões e limites
@@ -458,6 +560,23 @@ Não há parâmetro para desligá-la, e isso é decisão de projeto: a conferên
 milissegundos, não usa modelo, e é a única contenção do risco 8.4 que não depende de o leitor
 prestar atenção ao aviso. Ela é anexada dentro de `modelo_llm.resumir`, e não pela rota, para
 que nenhum consumidor do projeto — rota, página ou script — receba um resumo sem ela.
+
+**4.11 Memória sem estado no serviço** (TP5). `POST /assistente` não guarda conversa: a
+memória vem na requisição e volta na resposta. Guardar no serviço exigiria identificar o
+usuário — o que, sem autenticação (4.1), misturaria as conversas de quem chamasse — e criaria
+persistência de texto gerado, que o projeto evita desde o TP4 (4.8). Em troca, a requisição
+fica maior a cada pergunta, até as 60 mensagens aceitas; o modelo, de qualquer forma, vê só as
+seis últimas.
+
+**4.12 Conferência e fontes obrigatórias também na conversa.** Toda resposta do assistente
+traz `conferencia`, `fontes` e `contexto`, sem parâmetro para desligá-los — a mesma decisão de
+4.10, pelo mesmo motivo. A conferência é feita dentro de `assistente.responder`, não pela rota.
+
+**4.13 Parâmetros da conversa fixos.** Temperatura zero, semente fixa, janela de 8.192
+*tokens* e até 450 *tokens* de resposta, declarados em `modelo_llm.OPCOES_CONVERSA` e
+expostos em `GET /modelo`, no campo `parametros_da_conversa`. Não são configuráveis pelo
+cliente: com temperatura zero a mesma pergunta sobre os mesmos dados recebe a mesma resposta,
+o que torna a verificação reproduzível e a resposta citável.
 
 ---
 
@@ -545,6 +664,8 @@ resposta que muda de forma sem aviso é falha de governança, não inconveniente
 | `RespostaTexto`, `ResultadoSentimento`, `ResultadoResumo`, `Pontuacao` | `/processar_texto` | cabeçalho comum mais um bloco por tarefa |
 | `Conferencia`, `ItemConferido` | dentro de `ResultadoResumo` | a conferência faz parte do resultado, não é só tela |
 | `RespostaNoticias`, `NoticiaClassificada`, `SentimentoPorUF` | `/noticias/sentimento` | `saldo` limitado a [−1, 1] |
+| `Pergunta`, `Mensagem`, `Memoria` | entrada de `/assistente` | TP5; `papel` e `metodo` validados |
+| `RespostaAssistente`, `FontesDaResposta`, `NoticiaCitada`, `FonteIndicador` | `/assistente` | TP5; reaproveita `Conferencia` e `ItemConferido` |
 
 Onde o conteúdo da linha varia com o filtro — as tabelas de indicadores e de notícias — o
 tipo é `list[dict]`. Ali a forma do registro é a forma do CSV de origem, e congelar coluna
@@ -601,6 +722,7 @@ Exemplo de resposta 503:
     "o_que_fazer": [
       "confira se as dependências estão instaladas: pip install -r requirements.txt",
       "a primeira carga baixa os pesos do HuggingFace Hub e precisa de rede",
+      "para a conversa: inicie o Ollama e baixe o modelo uma vez com ollama pull llama3.1:8b",
       "tente carregar de novo em POST /modelo/carregar?tarefa=<tarefa>",
       "consulte GET /modelo para ver a situação de cada modelo"
     ],
@@ -678,3 +800,55 @@ indisponibilidade de um modelo para um pedido que seria inválido de qualquer fo
 | 503 declarado em `/processar_texto` | sim — a rota documenta 200, 422, 500 e 503 |
 | Descrição por grupo de rotas | os quatro grupos descritos: `serviço`, `dados`, `envio`, `linguagem natural` |
 | `GET /docs` e `GET /redoc` | 200 |
+
+---
+
+## 8. Teste aplicado no TP5
+
+*Adicionado em novembro — TP5.*
+
+Executado em 2026-11-25 contra o serviço em `127.0.0.1:8000`, com o Ollama no ar, e contra uma
+segunda instância em `127.0.0.1:8001` iniciada com `OLLAMA_URL` apontando para uma porta
+fechada — a situação real de quem roda a API sem o Ollama, **sem alterar o código**. **Cinquenta
+e três verificações, nenhuma falha.** A qualidade das respostas, que não é assunto desta
+referência, foi medida à parte, em quatro condições: seção 6 de `3_modeling/assistente_llm.md`.
+
+### 8.1 A rota e o contrato
+
+| Verificação | Resultado |
+| --- | --- |
+| `GET /` | 200, versão 1.2.0, anuncia `POST /assistente` |
+| `GET /saude` | 200, bloco `conversa` com o modelo no Ollama |
+| `GET /modelo` | 200, **três** fichas; a da conversa com `llama · Q4_K_M`, **8.030.261.312** parâmetros e `gpu (68%) + cpu`; `parametros_da_conversa` e `servidor_da_conversa` presentes; as fichas do TP4 inalteradas |
+| `POST /modelo/carregar?tarefa=conversa` | 200, modelo carregado no Ollama |
+| `POST /assistente`, primeira pergunta | 200, os 17 campos do contrato presentes, `gerativo: true`, 7 indicadores com URL nas fontes, matérias numeradas de 1 em diante com URL, conferência coerente com a lista, ranking das 27 UFs no `contexto`, nenhuma mensagem lembrada |
+| `POST /assistente`, pergunta seguinte com `historico` e `memoria` | foco `["PE", "BA"]` — a UF citada antes da lembrada —, 2 mensagens lembradas e o bloco de comparação direta no contexto |
+| A mesma pergunta sem `memoria` | foco só com `PE` — é a memória que traz a Bahia |
+| `pesos` e `metodo` enviados | o contexto traz o método e o mesmo topo de `nucleo.calcular_indice` com esses pesos: Acre, 45,4 |
+| Pesos iguais | o índice do contexto é o de `GET /ranking` |
+
+### 8.2 Validação e indisponibilidade
+
+| Verificação | Resultado |
+| --- | --- |
+| Pergunta só de espaços · de 2 caracteres · acima de 1.000 · sem pergunta | **422** nos quatro, apontando `pergunta` |
+| `metodo` desconhecido · `papel` desconhecido · histórico acima de 60 | **422**, apontando o campo |
+| `POST /processar_texto` com `tarefa: conversa` | **422** — a conversa tem rota própria |
+| `POST /assistente` sem o Ollama | **503**, com o motivo ("o Ollama não respondeu em …") e o `ollama pull` entre os passos |
+| Pergunta de 2 caracteres sem o Ollama | **422**, não 503 — a validação tem precedência |
+| `POST /modelo/carregar?tarefa=conversa` sem o Ollama | **503** |
+| `GET /modelo` e `GET /saude` sem o Ollama | **200**, a conversa relatada como indisponível, com o motivo |
+| `GET /ranking`, `/indicadores`, `/noticias`, `/fontes` sem o Ollama | **200**, com 27 UFs, 189 observações, 105 matérias e 9 fontes — **intactas** |
+| Modelo ausente do Ollama | o 404 do Ollama vira `ModeloIndisponivel`, e a mensagem manda rodar `ollama pull` — conferido direto em `modelo_llm.py` |
+
+### 8.3 Especificação e regressão
+
+| Verificação | Resultado |
+| --- | --- |
+| `/assistente` no `openapi.json` | declara 200, 422, 500 e 503 |
+| Esquemas | 13 caminhos, **33 esquemas** — os 7 novos presentes |
+| Esquema de resposta por operação | **15 de 15** |
+| `GET /ranking` | 27 UFs, topo Acre 81,1, e **paridade valor a valor** com `nucleo.calcular_indice` nas 27 UFs |
+| `GET /noticias?tema=4.5`, `GET /indicadores?uf=BA&ano=2025`, `GET /estatisticas` | 69 matérias, 3 observações, 189 e 105 — os números do TP3 |
+| Ciclo POST → ranking → `incluir_enviados=false` → DELETE | o enviado entra, sai do cálculo quando pedido e é descartado; ranking de volta ao original |
+| `metodo` inválido e indicador inexistente em `/ranking` | 422 e 404, como no TP3 |
